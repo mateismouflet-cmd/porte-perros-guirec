@@ -1,0 +1,22 @@
+# Dépendances
+node_modules/
+app/node_modules/
+
+# Build
+dist/
+app/dist/
+
+# Cache outils
+.vite/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Réglages locaux de l'éditeur / harness (gardés hors du dépôt)
+.claude/settings.local.json
