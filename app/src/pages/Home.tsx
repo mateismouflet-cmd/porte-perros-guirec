@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Waves,
@@ -10,6 +10,7 @@ import {
   Lock,
   Unlock,
   RefreshCw,
+  RotateCcw,
   ExternalLink,
   AlertTriangle,
 } from 'lucide-react';
@@ -1102,19 +1103,26 @@ function Timeline({ events, windows }: TimelineProps) {
 
 interface PressureSectionProps {
   pressure: number;
+  measuredPressure: number;
   enabled: boolean;
   onToggle: () => void;
   onPressureChange: (p: number) => void;
+  onResetToMeasured: () => void;
   correction: number;
 }
 
 function PressureSection({
   pressure,
+  measuredPressure,
   enabled,
   onToggle,
   onPressureChange,
+  onResetToMeasured,
   correction,
 }: PressureSectionProps) {
+  // Le curseur est-il calé sur la pression réelle mesurée du jour ?
+  const isOnMeasured = pressure === measuredPressure;
+
   return (
     <motion.div
       custom={5}
@@ -1144,11 +1152,19 @@ function PressureSection({
         </button>
       </div>
 
+      {/* Pression réelle mesurée (donnée auto), toujours visible */}
+      <div className="flex items-center justify-between mb-3 text-[0.8125rem]">
+        <span className="text-text-secondary">
+          Pression réelle du jour (mesurée)
+        </span>
+        <span className="font-mono text-text-accent">{measuredPressure} hPa</span>
+      </div>
+
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
         <div className="flex-1 w-full">
           <div className="flex items-center justify-between mb-2">
             <span className="font-mono-label text-text-muted">
-              Pression atmosphérique
+              Pression utilisée pour le calcul
             </span>
             <span className="font-mono text-sm text-text-accent">
               {pressure} hPa
@@ -1165,6 +1181,15 @@ function PressureSection({
           />
           <div className="flex justify-between mt-1">
             <span className="font-mono text-[10px] text-text-muted">970</span>
+            {enabled && !isOnMeasured && (
+              <button
+                onClick={onResetToMeasured}
+                className="flex items-center gap-1 text-[10px] text-accent-teal hover:brightness-110 transition-all"
+              >
+                <RotateCcw className="w-2.5 h-2.5" />
+                Revenir à la pression réelle
+              </button>
+            )}
             <span className="font-mono text-[10px] text-text-muted">1040</span>
           </div>
         </div>
@@ -1187,8 +1212,9 @@ function PressureSection({
 
       <p className="mt-3 text-[0.8125rem] text-text-muted flex items-start gap-1.5">
         <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-        Une pression élevée abaisse le niveau de la mer, une pression basse
-        l&apos;élève. Correction : Δh = -(P - 1013.25) × 0.01
+        {enabled
+          ? 'Activée : les hauteurs et horaires de porte sont corrigés avec la pression ci-dessus (par défaut, la pression réelle du jour). Une pression élevée abaisse le niveau de la mer, une pression basse l’élève.'
+          : 'Désactivée : aucune correction n’est appliquée. Activer pour corriger les horaires avec la pression réelle du jour (ajustable). Δh = -(P - 1013.25) × 0.01'}
       </p>
     </motion.div>
   );
@@ -1205,6 +1231,9 @@ export default function Home() {
   const [pressureEnabled, setPressureEnabled] = useState(false);
   const [manualPressure, setManualPressure] = useState(1013);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  // Au premier chargement, on cale le curseur sur la pression réelle mesurée
+  // (donnée auto de la météo) ; ensuite l'utilisateur peut l'ajuster librement.
+  const pressureInitialized = useRef(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -1226,6 +1255,15 @@ export default function Home() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Caler le curseur sur la pression réelle mesurée, une seule fois,
+  // dès que les premières données arrivent.
+  useEffect(() => {
+    if (tideData && !pressureInitialized.current) {
+      pressureInitialized.current = true;
+      setManualPressure(tideData.pressure);
+    }
+  }, [tideData]);
 
   // Auto-refresh toutes les 5 minutes
   useEffect(() => {
@@ -1314,9 +1352,11 @@ export default function Home() {
           />
           <PressureSection
             pressure={manualPressure}
+            measuredPressure={tideData.pressure}
             enabled={pressureEnabled}
             onToggle={() => setPressureEnabled((v) => !v)}
             onPressureChange={setManualPressure}
+            onResetToMeasured={() => setManualPressure(tideData.pressure)}
             correction={getPressureCorrection(manualPressure)}
           />
         </div>
