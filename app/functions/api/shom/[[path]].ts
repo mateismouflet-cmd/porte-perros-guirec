@@ -59,7 +59,13 @@ export const onRequestGet: PagesFunction = async (context) => {
   // serait faux et corromprait le JSON).
   const headers = new Headers();
   headers.set('Content-Type', upstream.headers.get('Content-Type') ?? 'application/json');
-  headers.set('Cache-Control', 'public, max-age=86400'); // prédictions déterministes
+  // Ne mettre en cache que les réponses OK : sinon un 403/erreur transitoire du
+  // SHOM serait figé 24 h au bord (cache poisoning). Les prédictions OK sont
+  // déterministes -> cache long.
+  headers.set(
+    'Cache-Control',
+    upstream.ok ? 'public, max-age=86400' : 'no-store',
+  );
 
   return new Response(upstream.body, {
     status: upstream.status,

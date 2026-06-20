@@ -222,12 +222,19 @@ async function ensureShomDays(start: Date, count: number): Promise<boolean> {
   try {
     const first = missing[0];
     const last = missing[missing.length - 1];
-    const span =
+    // L'endpoint SHOM spm/hlt renvoie 403 pour une demande d'UN seul jour
+    // (duration=1) ; dès 2 jours il répond normalement. On élargit donc toute
+    // plage à 2 jours minimum (les jours en trop sont déterministes et mis en
+    // cache, donc gratuits). Sans ça, un rafraîchissement quotidien qui ne
+    // manque qu'un jour basculerait à tort sur Open-Meteo.
+    const span = Math.max(
+      2,
       Math.round(
         (new Date(`${last}T00:00:00`).getTime() -
           new Date(`${first}T00:00:00`).getTime()) /
           86400000
-      ) + 1;
+      ) + 1
+    );
     await fetchShomSpan(first, span);
     // Vérifier que tout est bien arrivé
     return missing.every(
