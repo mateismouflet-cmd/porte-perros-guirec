@@ -1,0 +1,8 @@
+# Normalisation des fins de ligne, pour que les scripts marchent sur chaque OS.
+* text=auto
+
+# Les scripts shell DOIVENT rester en LF (sinon « bash\r: command not found » sous Linux)
+*.sh text eol=lf
+
+# Les scripts Windows restent en CRLF
+*.bat text eol=crlf

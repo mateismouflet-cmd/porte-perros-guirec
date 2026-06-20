@@ -36,8 +36,15 @@ Tous les calculs tournent dans le navigateur. La seule pièce côté serveur est
 
 ## Lancer l'application
 
-Sous Windows, double-cliquer sur **`Lancer l'appli.bat`** (démarre le serveur et ouvre
-le navigateur). Sinon, en ligne de commande :
+- **Windows** : double-cliquer sur **`Lancer l'appli.bat`**.
+- **Linux (Ubuntu) / macOS** : dans un terminal ouvert dans le dossier du projet,
+  lancer **`./lancer-appli.sh`** (au premier usage : `chmod +x lancer-appli.sh`).
+
+Les deux scripts installent les dépendances au premier lancement, démarrent le serveur
+et ouvrent le navigateur tout seuls. Laisser la fenêtre ouverte ; la fermer arrête
+l'application.
+
+En ligne de commande directe, quel que soit l'OS :
 
 ```bash
 cd app
@@ -45,7 +52,13 @@ npm install
 npm run dev      # → http://localhost:3000
 ```
 
-Node ≥ 20.19 est requis pour le serveur de dev (Vite 7).
+Node ≥ 20.19 est requis pour le serveur de dev (Vite 7). Sous Ubuntu, si la version des
+dépôts est trop ancienne :
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+```
 
 ## Structure
 
