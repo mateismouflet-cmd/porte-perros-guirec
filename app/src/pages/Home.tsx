@@ -1213,7 +1213,7 @@ function PressureSection({
       <p className="mt-3 text-[0.8125rem] text-text-muted flex items-start gap-1.5">
         <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
         {enabled
-          ? 'Activée : les hauteurs et horaires de porte sont corrigés avec la pression ci-dessus (par défaut, la pression réelle du jour). Une pression élevée abaisse le niveau de la mer, une pression basse l’élève.'
+          ? 'Activée : les hauteurs et horaires de porte sont corrigés avec la pression ci-dessus (par défaut, la pression réelle du jour). Une pression élevée abaisse le niveau de la mer, une dépression l’élève.'
           : 'Désactivée : aucune correction n’est appliquée. Activer pour corriger les horaires avec la pression réelle du jour (ajustable). Δh = -(P - 1013.25) × 0.01'}
       </p>
     </motion.div>
@@ -1371,6 +1371,50 @@ export default function Home() {
             curve={tideData.curve}
           />
           <TideDetails events={tideData.events} />
+        </div>
+      </div>
+
+      {/* Règles de bascule de la porte */}
+      <div className="mt-6">
+        <div className="gradient-surface rounded-2xl border border-[rgba(78,205,196,0.06)] p-6 shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+          <h3 className="font-outfit font-semibold text-xl text-text-primary mb-1">
+            Comment fonctionne la porte
+          </h3>
+          <p className="text-[0.9375rem] text-text-secondary mb-4">
+            L’automate ouvre et ferme la porte selon la hauteur d’eau. Voici les
+            règles de bascule qui produisent les horaires ci-dessous.
+          </p>
+
+          <div className="flex items-start gap-2.5 mb-3">
+            <Unlock className="w-4 h-4 text-status-open mt-0.5 flex-shrink-0" />
+            <p className="text-[0.9375rem] text-text-secondary">
+              <span className="text-text-primary font-medium">Ouverture</span> :
+              quand la marée montante franchit{' '}
+              <span className="font-mono text-text-accent">7,33 m</span>.
+            </p>
+          </div>
+
+          <div className="flex items-start gap-2.5">
+            <Lock className="w-4 h-4 text-status-closed mt-0.5 flex-shrink-0" />
+            <div className="text-[0.9375rem] text-text-secondary">
+              <span className="text-text-primary font-medium">Fermeture</span>,
+              selon la pleine mer (PM) et le coefficient :
+              <ul className="mt-1.5 space-y-1 list-disc list-inside marker:text-text-muted">
+                <li>
+                  PM ≤ <span className="font-mono text-text-accent">7,60 m</span> →
+                  fermeture <span className="text-text-primary">à la pleine mer</span> ;
+                </li>
+                <li>
+                  PM &gt; 7,60 m et coef &lt; 70 → fermeture sur la descente à{' '}
+                  <span className="font-mono text-text-accent">7,60 m</span> ;
+                </li>
+                <li>
+                  PM &gt; 7,60 m et coef ≥ 70 → fermeture sur la descente à{' '}
+                  <span className="font-mono text-text-accent">8,00 m</span>.
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
 
