@@ -349,7 +349,7 @@ function TideChart({ events, windows, coefficient, curve }: TideChartProps) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
         <div>
           <h3 className="font-outfit font-semibold text-xl text-text-primary">
-            Courbe de marée
+            Marégramme
           </h3>
           <p className="text-[0.9375rem] text-text-secondary">
             {fmtDate(new Date())}
@@ -1155,7 +1155,7 @@ function PressureSection({
       {/* Pression réelle mesurée (donnée auto), toujours visible */}
       <div className="flex items-center justify-between mb-3 text-[0.8125rem]">
         <span className="text-text-secondary">
-          Pression réelle du jour (mesurée)
+          Pression mesurée à Perros actuellement
         </span>
         <span className="font-mono text-text-accent">{measuredPressure} hPa</span>
       </div>
@@ -1310,7 +1310,7 @@ export default function Home() {
       {/* Titre de page */}
       <div className="mb-6">
         <h1 className="font-outfit font-bold text-[2.5rem] text-text-primary tracking-tight leading-tight">
-          Tableau de Bord
+          Prévisions horaires du seuil basculant
         </h1>
         <p className="text-text-secondary text-[0.9375rem] mt-1 capitalize">
           {fmtDate(new Date())}
@@ -1378,11 +1378,11 @@ export default function Home() {
       <div className="mt-6">
         <div className="gradient-surface rounded-2xl border border-[rgba(78,205,196,0.06)] p-6 shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
           <h3 className="font-outfit font-semibold text-xl text-text-primary mb-1">
-            Comment fonctionne la porte
+            Conditions de déclenchement du seuil
           </h3>
           <p className="text-[0.9375rem] text-text-secondary mb-4">
             L’automate ouvre et ferme la porte selon la hauteur d’eau. Voici les
-            règles de bascule qui produisent les horaires ci-dessous.
+            règles de bascule qui produisent les horaires présentés.
           </p>
 
           <div className="flex items-start gap-2.5 mb-3">
@@ -1401,15 +1401,17 @@ export default function Home() {
               selon la pleine mer (PM) et le coefficient :
               <ul className="mt-1.5 space-y-1 list-disc list-inside marker:text-text-muted">
                 <li>
-                  PM ≤ <span className="font-mono text-text-accent">7,60 m</span> →
-                  fermeture <span className="text-text-primary">à la pleine mer</span> ;
+                  <span className="text-text-primary font-medium">PM ≤ 7,60 m</span> →
+                  fermeture <span className="font-mono text-text-accent">à la pleine mer</span> ;
                 </li>
                 <li>
-                  PM &gt; 7,60 m et coef &lt; 70 → fermeture sur la descente à{' '}
+                  <span className="text-text-primary font-medium">PM &gt; 7,60 m et coef &lt; 70</span> →
+                  fermeture sur la descente à{' '}
                   <span className="font-mono text-text-accent">7,60 m</span> ;
                 </li>
                 <li>
-                  PM &gt; 7,60 m et coef ≥ 70 → fermeture sur la descente à{' '}
+                  <span className="text-text-primary font-medium">PM &gt; 7,60 m et coef ≥ 70</span> →
+                  fermeture sur la descente à{' '}
                   <span className="font-mono text-text-accent">8,00 m</span>.
                 </li>
               </ul>

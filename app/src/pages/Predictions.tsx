@@ -126,20 +126,21 @@ function toDayPrediction(td: TideData, date: Date): DayPrediction {
     status = 'closed';
   }
 
-  const windowsStr = windows
-    .map((w) => `${format(w.openTime, 'HH:mm', { locale: fr })} à ${format(w.closeTime, 'HH:mm', { locale: fr })}`)
-    .join(' et de ');
-
   let advice: string;
   const totalHours = totalOpenDuration / 60;
-  if (totalHours > 4) {
-    advice = `Bonne journée pour naviguer — la porte est ouverte de ${windowsStr}.`;
-  } else if (totalHours > 1) {
-    advice = `Fenêtre de navigation courte — prévoir un créneau de ${windowsStr}.`;
-  } else if (totalHours > 0) {
-    advice = `⚠️ Ouverture très courte — la porte ne s'ouvrira peut-être pas. Vérifier avec la capitainerie.`;
-  } else {
+  const opensMorning = windows.some((w) => w.openTime.getHours() < 12);
+  const closesEvening = windows.some((w) => w.closeTime.getHours() >= 17);
+  const hasLongWindow = windows.some((w) => w.durationMinutes >= 120);
+  if (totalHours <= 0) {
     advice = `Porte fermée toute la journée — pas de sortie possible.`;
+  } else if (totalHours <= 1) {
+    advice = `⚠️ Ouverture très courte — la porte ne s'ouvrira peut-être pas. Vérifier avec la capitainerie.`;
+  } else if (opensMorning && closesEvening) {
+    advice = `Belle journée — ouverture le matin et fermeture le soir.`;
+  } else if (hasLongWindow) {
+    advice = `Belle plage d'au moins 2h d'ouverture — idéal pour une balade dans la baie.`;
+  } else {
+    advice = `Fenêtre de navigation courte — prévoir son créneau.`;
   }
 
   // Courbe pour le graphique : un point tous les quarts d'heure
@@ -560,10 +561,12 @@ function PredictionsTable({
                     )}
                   </td>
                   <td className="px-4 py-3.5">
-                    {day.totalOpenDuration > 0 ? (
-                      <span className="font-mono text-[0.9375rem] text-text-primary">
-                        {formatDuration(day.totalOpenDuration)}
-                      </span>
+                    {day.openWindows.length > 0 ? (
+                      day.openWindows.map((w, wi) => (
+                        <span key={wi} className="font-mono text-[0.9375rem] text-text-primary block">
+                          {formatDuration(w.durationMinutes)}
+                        </span>
+                      ))
                     ) : (
                       <span className="text-text-muted">—</span>
                     )}
@@ -646,15 +649,17 @@ function PredictionsTable({
 
               {/* Porte */}
               {day.openWindows.length > 0 && (
-                <div className="flex items-center justify-between text-sm border-t border-[rgba(78,205,196,0.06)] pt-2">
-                  <div>
+                <div className="text-sm border-t border-[rgba(78,205,196,0.06)] pt-2">
+                  <div className="flex items-center justify-between">
                     <p className="text-text-muted text-xs">Ouverture</p>
-                    <p className="font-mono text-status-open">{fmtTime(day.openWindows[0].openTime)} – {fmtTime(day.openWindows[0].closeTime)}</p>
-                  </div>
-                  <div className="text-right">
                     <p className="text-text-muted text-xs">Durée</p>
-                    <p className="font-mono text-text-accent">{formatDuration(day.totalOpenDuration)}</p>
                   </div>
+                  {day.openWindows.map((w, wi) => (
+                    <div key={wi} className="flex items-center justify-between">
+                      <p className="font-mono text-status-open">{fmtTime(w.openTime)} – {fmtTime(w.closeTime)}</p>
+                      <p className="font-mono text-text-accent">{formatDuration(w.durationMinutes)}</p>
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -692,6 +697,7 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
   }, [day.openWindows, safetyMargin]);
 
   const adjustedDuration = adjustedWindows.reduce((sum, w) => sum + Math.max(0, w.durationMinutes), 0);
+  const openWindowsWithDuration = adjustedWindows.filter((w) => w.durationMinutes > 0);
 
   const handleCopy = useCallback(() => {
     const tideLines = day.events
@@ -777,8 +783,8 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
       {/* En-tête */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h2 className="font-outfit font-semibold text-[1.75rem] text-text-primary tracking-[-0.02em] capitalize">
-            Détail du {fmtDate(day.date)}
+          <h2 className="font-outfit font-semibold text-[1.75rem] text-text-primary tracking-[-0.02em]">
+            Détails du {fmtDate(day.date)}
           </h2>
           <span className={`inline-block mt-2 text-[0.8125rem] px-3 py-1 rounded-full ${
             day.coefficient > 70
@@ -883,23 +889,46 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
         <div>
           <h3 className="font-outfit font-semibold text-[1rem] text-text-primary mb-4 flex items-center gap-2">
             <Waves className="w-4 h-4 text-accent-teal" />
-            Conseil du jour
+            Synthèse du jour
           </h3>
           <div className="relative bg-bg-tertiary rounded-xl p-5">
             <Anchor className="absolute top-4 right-4 w-6 h-6 text-accent-teal opacity-40" />
             <p className="text-[0.9375rem] text-text-secondary leading-relaxed pr-8">
-              {safetyMargin !== 0 && adjustedDuration <= 0
-                ? `Avec une marge de ${safetyMargin} min, la porte serait fermée toute la journée.`
-                : day.advice
-              }
+              {safetyMargin !== 0 && adjustedDuration <= 0 ? (
+                `Avec une marge de ${safetyMargin} min, la porte serait fermée toute la journée.`
+              ) : (
+                <>
+                  {day.advice}
+                  {openWindowsWithDuration.length > 0 && (
+                    <>
+                      {' '}La porte est ouverte{' '}
+                      {openWindowsWithDuration.map((w, wi) => (
+                        <span key={wi}>
+                          {wi > 0 && ' et '}
+                          <span className="font-semibold text-status-open">
+                            {formatDuration(w.durationMinutes)}
+                          </span>
+                          {' de '}
+                          <span className="font-mono text-text-primary">{fmtTime(w.openTime)}</span>
+                          {' à '}
+                          <span className="font-mono text-text-primary">{fmtTime(w.closeTime)}</span>
+                        </span>
+                      ))}
+                      .
+                    </>
+                  )}
+                </>
+              )}
             </p>
 
-            {/* Durée ajustée */}
+            {/* Durées par ouverture (ajustées de la marge) */}
             {adjustedDuration > 0 && (
               <div className="mt-4 flex items-center gap-2">
                 <Unlock className="w-4 h-4 text-status-open" />
                 <span className="font-mono text-[0.875rem] text-text-accent">
-                  Durée d&apos;ouverture : {formatDuration(adjustedDuration)}
+                  {openWindowsWithDuration
+                    .map((w) => `${w.openTime.getHours() < 12 ? 'Matin' : 'Soir'} ${formatDuration(w.durationMinutes)}`)
+                    .join(' · ')}
                 </span>
               </div>
             )}
