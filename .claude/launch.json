@@ -6,6 +6,15 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "app"],
       "port": 3000
+    },
+    {
+      "name": "pages-local",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "cd app && npx wrangler pages dev dist --kv COMPTEUR --port 8788"
+      ],
+      "port": 8788
     }
   ]
 }

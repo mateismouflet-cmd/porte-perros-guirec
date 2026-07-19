@@ -1,6 +1,30 @@
+import { useEffect, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 
+const CLE_SESSION = 'visite-comptee';
+
+// Compteur de connexions servi par la Pages Function /api/visites (KV).
+// null = pas chargé / indisponible (dev local, binding KV absent) -> rien affiché.
+// Une connexion = une session de navigateur : le premier chargement de la
+// session incrémente (POST), les suivants ne font que lire (GET).
+function useCompteurVisites(): number | null {
+  const [visites, setVisites] = useState<number | null>(null);
+  useEffect(() => {
+    const dejaComptee = sessionStorage.getItem(CLE_SESSION) === '1';
+    if (!dejaComptee) sessionStorage.setItem(CLE_SESSION, '1');
+    fetch('/api/visites', { method: dejaComptee ? 'GET' : 'POST' })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { visites?: number }) => {
+        if (typeof d.visites === 'number') setVisites(d.visites);
+      })
+      .catch(() => {}); // silencieux : dev local ou KV absent
+  }, []);
+  return visites;
+}
+
 export default function Footer() {
+  const visites = useCompteurVisites();
+
   return (
     <footer className="w-full bg-bg-primary border-t border-[rgba(78,205,196,0.06)] py-8 px-4 sm:px-6">
       <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -19,6 +43,14 @@ export default function Footer() {
           À titre indicatif — vérifier toujours auprès de la capitainerie
         </p>
       </div>
+      {visites !== null && (
+        <p
+          className="mt-4 text-center text-[10px] text-text-muted/50 tabular-nums select-none"
+          title="Connexions"
+        >
+          {visites.toLocaleString('fr-FR')}
+        </p>
+      )}
     </footer>
   );
 }
