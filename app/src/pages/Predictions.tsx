@@ -33,6 +33,7 @@ import Layout from '@/components/Layout';
 import {
   getTideDataForDates,
   formatDuration,
+  GATE_OPEN_HEIGHT,
 } from '@/lib/tideEngine';
 import type { TideData, TideEvent, TideWindow, TideSource } from '@/lib/tideEngine';
 
@@ -747,7 +748,7 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
         at: w.openTime,
         time: fmtTime(w.openTime),
         label: 'Ouverture porte',
-        value: '≥ 7.33 m (marée montante)',
+        value: '≥ 7.30 m (marée montante)',
         color: 'bg-status-open',
       });
       const pm = day.events.find(
@@ -839,7 +840,7 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
               }}
               formatter={(value: number) => [`${value.toFixed(2)} m`, 'Hauteur']}
             />
-            <ReferenceLine y={7.33} stroke="#2ECC71" strokeDasharray="5 5" strokeOpacity={0.5} />
+            <ReferenceLine y={GATE_OPEN_HEIGHT} stroke="#2ECC71" strokeDasharray="5 5" strokeOpacity={0.5} />
             <Area
               type="monotone"
               dataKey="height"

@@ -33,6 +33,7 @@ import {
   getTideDataForDate,
   getPressureCorrection,
   getInterpolatedHeight,
+  GATE_OPEN_HEIGHT,
 } from '@/lib/tideEngine';
 import type { TideData, TideEvent, TideWindow, HourlyTideData } from '@/lib/tideEngine';
 
@@ -296,7 +297,7 @@ function CustomTooltip({
   if (!active || !payload || !payload.length) return null;
 
   const data = payload[0].payload;
-  const isGateOpen = data.height >= 7.33;
+  const isGateOpen = data.height >= GATE_OPEN_HEIGHT;
 
   return (
     <div className="bg-bg-secondary border border-[rgba(78,205,196,0.15)] rounded-xl px-4 py-3 shadow-xl">
@@ -370,7 +371,7 @@ function TideChart({ events, windows, coefficient, curve }: TideChartProps) {
           </div>
           <div className="flex items-center gap-1">
             <span className="w-4 h-0.5 border-t border-dashed border-[rgba(78,205,196,0.3)]" />
-            <span>Seuil 7.33m</span>
+            <span>Seuil 7.30m</span>
           </div>
         </div>
       </div>
@@ -440,7 +441,7 @@ function TideChart({ events, windows, coefficient, curve }: TideChartProps) {
                   key={i}
                   x1={openTimeStr}
                   x2={closeTimeStr}
-                  y1={7.33}
+                  y1={GATE_OPEN_HEIGHT}
                   y2={10}
                   fill="rgba(46,204,113,0.06)"
                   stroke="none"
@@ -448,14 +449,14 @@ function TideChart({ events, windows, coefficient, curve }: TideChartProps) {
               );
             })}
 
-            {/* Ligne d'ouverture 7.33m */}
+            {/* Ligne d'ouverture 7.30m */}
             <ReferenceLine
-              y={7.33}
+              y={GATE_OPEN_HEIGHT}
               stroke="#2ECC71"
               strokeDasharray="4 4"
               strokeOpacity={0.6}
               label={{
-                value: 'Ouverture 7.33m',
+                value: 'Ouverture 7.30m',
                 position: 'right',
                 fill: '#2ECC71',
                 fontSize: 10,
@@ -843,7 +844,7 @@ function Timeline({ events, windows }: TimelineProps) {
       result.push({
         time: w.openTime,
         label: `Ouverture ${fmtTime(w.openTime)}`,
-        detail: 'Seuil 7.33m atteint',
+        detail: 'Seuil 7.30m atteint',
         color: '#2ECC71',
         icon: 'open',
       });
@@ -1062,7 +1063,7 @@ function Timeline({ events, windows }: TimelineProps) {
                   {fmtTime(w.openTime)}
                 </td>
                 <td className="py-2.5 px-3 font-mono text-text-accent">
-                  7.33 m
+                  7.30 m
                 </td>
                 <td className="py-2.5 px-3 text-text-muted">
                   Seuil atteint (montée)
@@ -1390,7 +1391,7 @@ export default function Home() {
             <p className="text-[0.9375rem] text-text-secondary">
               <span className="text-text-primary font-medium">Ouverture</span> :
               quand la marée montante franchit{' '}
-              <span className="font-mono text-text-accent">7,33 m</span>.
+              <span className="font-mono text-text-accent">7,30 m</span>.
             </p>
           </div>
 

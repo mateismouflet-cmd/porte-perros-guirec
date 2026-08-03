@@ -78,7 +78,7 @@ Si P = 983 hPa → Δh = +0.30m (niveau plus haut)
 ## Règles d'ouverture de la porte du port de Perros-Guirec
 
 ### Paramètres de l'automate
-- **Hauteur d'ouverture** : 7.3 m (± quelques cm, ex: 7.33m)
+- **Hauteur d'ouverture** : 7,30 m
 - **Fermeture** : Deux cas possibles :
   - Si H_PM > 7.6m (resp. 8m) → fermeture à 7.60m (coef < 70) ou 8m (coef > 70) à marée descendante
   - Si H_PM < 7.6m → fermeture à la PM

@@ -327,12 +327,12 @@ Les règles fournies par l'utilisateur pour la fermeture sont cohérentes avec l
 
 **Principe physique** : La porte/ seuil basculant s'ouvre quand le niveau extérieur est suffisamment élevé par rapport au niveau du bassin (2,50 m). La fermeture empêche l'eau de s'échapper du bassin quand le niveau extérieur descend.
 
-### 6.6 Calcul de la hauteur d'ouverture (7,3 m)
+### 6.6 Calcul de la hauteur d'ouverture (7,30 m)
 
-Le seuil d'ouverture de 7,3 m correspond approximativement à :
+Le seuil d'ouverture de 7,30 m correspond approximativement à :
 - Un coefficient de **~50-55** selon les jours
 - C'est le minimum pour que le niveau extérieur soit suffisamment au-dessus du niveau du bassin (2,50 m) pour permettre le passage avec un débit acceptable
-- Avec ± quelques cm (ex: 7,33 m) pour tenir compte de l'incertitude
+- Le seuil exact utilisé par l'automate est de 7,30 m
 
 **Source** : Figaro Nautisme - Bloc Marine, fiche Port Perros-Guirec
 

@@ -35,7 +35,7 @@ Construire une application web (dashboard) pour prédire les horaires d'ouvertur
 - Livrer l'URL à l'utilisateur
 
 ## Règles de la Porte (à implémenter)
-- Ouverture à 7,3m (± quelques cm, ex: 7,33m)
+- Ouverture à 7,30 m
 - Fermeture cas 1 (PM > 7,6m): à 7,60m (coef < 70) ou 8m (coef > 70) à marée descendante
 - Fermeture cas 2 (PM < 7,6m): fermeture à la PM
 - Marge capitainerie: ils publient avec marge de sécurité (ex: 16h30 réel → 16h publié)

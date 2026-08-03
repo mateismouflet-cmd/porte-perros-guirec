@@ -67,7 +67,7 @@ export interface TideData {
 // ============================================================
 
 /** Seuil d'ouverture de la porte (marée montante) */
-export const GATE_OPEN_HEIGHT = 7.33;
+export const GATE_OPEN_HEIGHT = 7.3;
 /** Seuil de fermeture à marée descendante, coefficient < 70 */
 export const GATE_CLOSE_LOW = 7.6;
 /** Seuil de fermeture à marée descendante, coefficient >= 70 */
@@ -605,7 +605,7 @@ export function findCrossingHeight(
 /**
  * Fenêtres d'ouverture calculées sur la courbe de hauteur d'eau.
  *
- * - Ouverture : croisement montant de 7.33 m.
+ * - Ouverture : croisement montant de 7.30 m.
  * - Fermeture, selon la PM du cycle et son coefficient :
  *   - PM ≤ 7.6 m            → fermeture à la PM (pas de seuil descendant) ;
  *   - PM > 7.6 m, coef < 70 → croisement descendant de 7.60 m ;
