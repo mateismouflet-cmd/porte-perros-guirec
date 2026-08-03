@@ -61,7 +61,9 @@ const cardVariants = {
 // ============================================================
 
 function fmtTime(date: Date): string {
-  return format(date, 'HH:mm', { locale: fr });
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
 }
 
 function fmtDate(date: Date): string {
@@ -1021,76 +1023,75 @@ function Timeline({ events, windows }: TimelineProps) {
             </tr>
           </thead>
           <tbody>
-            {events.map((e, i) => (
-              <tr
-                key={`evt-${i}`}
-                className={`border-b border-[rgba(78,205,196,0.04)] ${
-                  i % 2 === 0 ? 'bg-bg-primary/30' : 'bg-bg-secondary/30'
-                }`}
-              >
-                <td className="py-2.5 px-3">
-                  <div className="flex items-center gap-1.5">
-                    {e.type === 'PM' ? (
-                      <ArrowUp className="w-3.5 h-3.5 text-accent-teal" />
-                    ) : (
-                      <ArrowDown className="w-3.5 h-3.5 text-accent-ocean" />
-                    )}
-                    <span className="font-medium text-text-primary">
-                      {e.type === 'PM' ? 'Pleine Mer' : 'Basse Mer'}
-                    </span>
-                  </div>
-                </td>
-                <td className="py-2.5 px-3 font-mono text-text-primary">
-                  {fmtTime(e.time)}
-                </td>
-                <td className="py-2.5 px-3 font-mono text-accent-teal">
-                  {e.height.toFixed(2)} m
-                </td>
-                <td className="py-2.5 px-3 text-text-muted">—</td>
-              </tr>
-            ))}
-            {windows.map((w, i) => (
-              <tr key={`win-${i}`} className="border-b border-[rgba(78,205,196,0.04)] bg-[rgba(46,204,113,0.04)]">
-                <td className="py-2.5 px-3 border-l-[3px] border-status-open">
-                  <div className="flex items-center gap-1.5">
-                    <Unlock className="w-3.5 h-3.5 text-status-open" />
-                    <span className="font-medium text-status-open">
-                      Ouverture
-                    </span>
-                  </div>
-                </td>
-                <td className="py-2.5 px-3 font-mono text-text-primary">
-                  {fmtTime(w.openTime)}
-                </td>
-                <td className="py-2.5 px-3 font-mono text-text-accent">
-                  7.30 m
-                </td>
-                <td className="py-2.5 px-3 text-text-muted">
-                  Seuil atteint (montée)
-                </td>
-              </tr>
-            ))}
-            {windows.map((w, i) => (
-              <tr key={`winc-${i}`} className="border-b border-[rgba(78,205,196,0.04)] bg-[rgba(231,76,60,0.04)]">
-                <td className="py-2.5 px-3 border-l-[3px] border-status-closed">
-                  <div className="flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-status-closed" />
-                    <span className="font-medium text-status-closed">
-                      Fermeture
-                    </span>
-                  </div>
-                </td>
-                <td className="py-2.5 px-3 font-mono text-text-primary">
-                  {fmtTime(w.closeTime)}
-                </td>
-                <td className="py-2.5 px-3 font-mono text-text-accent">
-                  —
-                </td>
-                <td className="py-2.5 px-3 text-text-muted">
-                  {w.durationMinutes.toFixed(0)} min de plage
-                </td>
-              </tr>
-            ))}
+            {items.map((item, i) => {
+              const isTide = item.icon === 'PM' || item.icon === 'BM';
+              const isOpening = item.icon === 'open';
+              const rowClass = isOpening
+                ? 'bg-[rgba(46,204,113,0.04)]'
+                : item.icon === 'close'
+                  ? 'bg-[rgba(231,76,60,0.04)]'
+                  : i % 2 === 0
+                    ? 'bg-bg-primary/30'
+                    : 'bg-bg-secondary/30';
+
+              return (
+                <tr
+                  key={`${item.icon}-${item.time.getTime()}`}
+                  className={`border-b border-[rgba(78,205,196,0.04)] ${rowClass}`}
+                >
+                  <td
+                    className={`py-2.5 px-3 ${
+                      isOpening
+                        ? 'border-l-[3px] border-status-open'
+                        : item.icon === 'close'
+                          ? 'border-l-[3px] border-status-closed'
+                          : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      {item.icon === 'PM' && (
+                        <ArrowUp className="w-3.5 h-3.5 text-accent-teal" />
+                      )}
+                      {item.icon === 'BM' && (
+                        <ArrowDown className="w-3.5 h-3.5 text-accent-ocean" />
+                      )}
+                      {isOpening && (
+                        <Unlock className="w-3.5 h-3.5 text-status-open" />
+                      )}
+                      {item.icon === 'close' && (
+                        <Lock className="w-3.5 h-3.5 text-status-closed" />
+                      )}
+                      <span
+                        className={`font-medium ${
+                          isOpening
+                            ? 'text-status-open'
+                            : item.icon === 'close'
+                              ? 'text-status-closed'
+                              : 'text-text-primary'
+                        }`}
+                      >
+                        {item.icon === 'PM'
+                          ? 'Pleine Mer'
+                          : item.icon === 'BM'
+                            ? 'Basse Mer'
+                            : isOpening
+                              ? 'Ouverture'
+                              : 'Fermeture'}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-3 font-mono text-text-primary">
+                    {fmtTime(item.time)}
+                  </td>
+                  <td className="py-2.5 px-3 font-mono text-accent-teal">
+                    {isTide ? item.detail : isOpening ? '7.30 m' : '—'}
+                  </td>
+                  <td className="py-2.5 px-3 text-text-muted">
+                    {isTide ? '—' : item.detail}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
