@@ -54,6 +54,8 @@ export interface TideData {
   currentHeight: number;
   isOpen: boolean;
   nextEvent: { type: 'open' | 'close'; time: Date } | null;
+  /** Prochaine plage complète à venir, y compris si elle commence le lendemain */
+  nextWindow: TideWindow | null;
   pressure: number;
   pressureCorrection: number;
   /** Provenance réelle des données affichées */
@@ -759,6 +761,8 @@ export async function getTideDataForDate(
   );
 
   let nextEvent: { type: 'open' | 'close'; time: Date } | null = null;
+  const nextWindow =
+    allWindows.find((w) => w.openTime.getTime() > nowMs) ?? null;
   for (const w of allWindows) {
     if (w.openTime.getTime() > nowMs) {
       if (!nextEvent || w.openTime.getTime() < nextEvent.time.getTime()) {
@@ -779,6 +783,7 @@ export async function getTideDataForDate(
     currentHeight,
     isOpen,
     nextEvent,
+    nextWindow,
     pressure: Math.round(nearest.pressure),
     pressureCorrection: correction,
     source,

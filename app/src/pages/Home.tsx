@@ -122,6 +122,7 @@ function CountdownTimer({ targetTime, label }: { targetTime: Date; label: string
 
 function StatusCard({ tideData, onRefresh, isLoading }: StatusCardProps) {
   const isOpen = tideData.isOpen;
+  const nextWindow = !isOpen ? tideData.nextWindow : null;
   const badgeText = isOpen ? 'PORTE OUVERTE' : 'PORTE FERMÉE';
   const badgeColor = isOpen
     ? 'text-status-open bg-[rgba(46,204,113,0.12)] border-[rgba(46,204,113,0.25)]'
@@ -139,11 +140,8 @@ function StatusCard({ tideData, onRefresh, isLoading }: StatusCardProps) {
       ? `Ouverte — fermeture prévue à ${fmtTime(closeWindow.closeTime)}`
       : 'Ouverte';
   } else {
-    const nextOpen = tideData.windows.find(
-      (w) => w.openTime.getTime() > Date.now()
-    );
-    subStatus = nextOpen
-      ? `Fermée — prochaine ouverture à ${fmtTime(nextOpen.openTime)}`
+    subStatus = nextWindow
+      ? `Fermée — prochaine ouverture à ${fmtTime(nextWindow.openTime)}`
       : 'Fermée';
   }
 
@@ -188,18 +186,42 @@ function StatusCard({ tideData, onRefresh, isLoading }: StatusCardProps) {
         </button>
       </div>
 
-      <p className="text-text-secondary text-[0.9375rem] mb-2">{subStatus}</p>
+      <div
+        className={`grid gap-5 ${
+          nextWindow ? 'md:grid-cols-[minmax(0,1fr)_auto] md:items-center' : ''
+        }`}
+      >
+        <div>
+          <p className="text-text-secondary text-[0.9375rem] mb-2">{subStatus}</p>
 
-      {tideData.nextEvent && (
-        <CountdownTimer
-          targetTime={tideData.nextEvent.time}
-          label={
-            tideData.nextEvent.type === 'open'
-              ? 'Prochaine ouverture dans'
-              : 'Fermeture dans'
-          }
-        />
-      )}
+          {tideData.nextEvent && (
+            <CountdownTimer
+              targetTime={tideData.nextEvent.time}
+              label={
+                tideData.nextEvent.type === 'open'
+                  ? 'Prochaine ouverture dans'
+                  : 'Fermeture dans'
+              }
+            />
+          )}
+        </div>
+
+        {nextWindow && (
+          <div className="md:min-w-[230px] rounded-xl border border-[rgba(46,204,113,0.18)] bg-[rgba(46,204,113,0.05)] px-4 py-3">
+            <p className="font-mono-label text-status-open/80 mb-2">
+              Prochaine plage d&apos;ouverture
+            </p>
+            <div className="flex items-center gap-2 font-mono text-xl text-text-primary">
+              <span>{fmtTime(nextWindow.openTime)}</span>
+              <span className="text-text-muted">—</span>
+              <span>{fmtTime(nextWindow.closeTime)}</span>
+            </div>
+            <p className="mt-1 text-xs text-text-muted">
+              Ouverture → fermeture
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Heure actuelle */}
       <div className="mt-4 pt-3 border-t border-[rgba(78,205,196,0.06)]">
@@ -819,6 +841,13 @@ interface TimelineItem {
 }
 
 function Timeline({ events, windows }: TimelineProps) {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
   const items = useMemo<TimelineItem[]>(() => {
     const result: TimelineItem[] = [];
 
@@ -863,33 +892,45 @@ function Timeline({ events, windows }: TimelineProps) {
     return result;
   }, [events, windows]);
 
-  // Position proportionnelle dans la journée (0-100%)
+  const dayStart = new Date(now);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+  const dayStartMs = dayStart.getTime();
+  const dayEndMs = dayEnd.getTime();
+
+  // Position proportionnelle dans la journée (0-100%), avec gestion correcte
+  // des plages qui commencent la veille ou se terminent le lendemain.
   const getPosition = (time: Date): number => {
-    const hours = time.getHours() + time.getMinutes() / 60;
-    return (hours / 24) * 100;
+    const raw = ((time.getTime() - dayStartMs) / (dayEndMs - dayStartMs)) * 100;
+    return Math.min(100, Math.max(0, raw));
   };
 
   // Répartit les étiquettes sur 3 étages pour éviter les chevauchements
   // quand plusieurs événements tombent à quelques minutes d'écart
-  const positionedItems = useMemo(() => {
+  const positionedItems = (() => {
     const lastLabelPos: number[] = [];
     const MIN_GAP = 9; // % de largeur sous lequel deux étiquettes se chevauchent
-    return items.map((item) => {
-      const pos = getPosition(item.time);
-      let tier = 0;
-      while (
-        tier < 2 &&
-        lastLabelPos[tier] !== undefined &&
-        pos - lastLabelPos[tier] < MIN_GAP
-      ) {
-        tier++;
-      }
-      lastLabelPos[tier] = pos;
-      return { ...item, pos, tier };
-    });
-  }, [items]);
+    return items
+      .filter(
+        (item) =>
+          item.time.getTime() >= dayStartMs && item.time.getTime() < dayEndMs
+      )
+      .map((item) => {
+        const pos = getPosition(item.time);
+        let tier = 0;
+        while (
+          tier < 2 &&
+          lastLabelPos[tier] !== undefined &&
+          pos - lastLabelPos[tier] < MIN_GAP
+        ) {
+          tier++;
+        }
+        lastLabelPos[tier] = pos;
+        return { ...item, pos, tier };
+      });
+  })();
 
-  const now = new Date();
   const nowPosition = getPosition(now);
 
   return (
@@ -908,13 +949,21 @@ function Timeline({ events, windows }: TimelineProps) {
       </p>
 
       {/* Timeline bar */}
-      <div className="relative mb-8 mt-20">
+      <div className="relative mb-14 mt-20">
         {/* Barre de fond */}
         <div className="h-2 bg-bg-surface rounded-full w-full relative">
           {/* Plages d'ouverture */}
           {windows.map((w, i) => {
-            const start = getPosition(w.openTime);
-            const end = getPosition(w.closeTime);
+            const visibleStart = new Date(
+              Math.max(w.openTime.getTime(), dayStartMs)
+            );
+            const visibleEnd = new Date(
+              Math.min(w.closeTime.getTime(), dayEndMs)
+            );
+            if (visibleEnd.getTime() <= visibleStart.getTime()) return null;
+
+            const start = getPosition(visibleStart);
+            const end = getPosition(visibleEnd);
             return (
               <div
                 key={i}
@@ -975,16 +1024,24 @@ function Timeline({ events, windows }: TimelineProps) {
           </motion.div>
         ))}
 
-        {/* Indicateur heure actuelle */}
+        {/* Repère explicite de l'heure actuelle */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.8, duration: 0.3 }}
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
+          className="absolute top-1/2 z-20 -translate-y-1/2 -translate-x-1/2 pointer-events-none"
           style={{ left: `${nowPosition}%` }}
         >
-          <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-b-[8px] border-l-transparent border-r-transparent border-b-sun-gold -mt-2" />
-          <div className="w-0.5 h-4 bg-sun-gold/70 mx-auto" />
+          <div className="absolute left-1/2 top-1/2 h-7 w-px -translate-x-1/2 -translate-y-1/2 bg-sun-gold/80" />
+          <div className="relative w-3 h-3 rounded-full border-2 border-bg-primary bg-sun-gold shadow-[0_0_10px_rgba(255,193,7,0.45)]" />
+          <div className="absolute left-1/2 top-5 -translate-x-1/2 whitespace-nowrap rounded-md border border-sun-gold/30 bg-bg-secondary px-2 py-1 shadow-lg">
+            <div className="flex items-center gap-1.5 text-sun-gold">
+              <Clock className="h-3 w-3" />
+              <span className="font-mono text-[10px] font-medium">
+                Maintenant {fmtTime(now)}
+              </span>
+            </div>
+          </div>
         </motion.div>
       </div>
 
