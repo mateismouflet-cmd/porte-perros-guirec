@@ -364,7 +364,7 @@ function WeeklySummary({ days, onSelectDay, now }: { days: DayPrediction[]; onSe
     >
       <div className="mb-5">
         <h2 className="font-outfit font-semibold text-[1.75rem] text-text-primary tracking-[-0.02em]">
-          Résumé de la semaine
+          Prévisions à 7 jours
         </h2>
         <p className="text-[0.9375rem] text-text-secondary mt-1">
           Uniquement les ouvertures encore à venir
