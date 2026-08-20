@@ -92,8 +92,38 @@ interface DayPrediction {
   hourlyData: { time: string; height: number }[];
 }
 
+interface WindowSummary {
+  windows: TideWindow[];
+  totalOpenDuration: number;
+  status: 'open' | 'marginal' | 'closed';
+}
+
 type SortColumn = 'day' | 'bm' | 'coef' | 'pm' | 'open' | 'close' | 'duration' | 'status';
 type SortDirection = 'asc' | 'desc';
+
+function summarizeWindows(windows: TideWindow[]): WindowSummary {
+  const totalOpenDuration = windows.reduce((sum, w) => sum + w.durationMinutes, 0);
+  const status = totalOpenDuration > 60
+    ? 'open'
+    : totalOpenDuration > 0
+      ? 'marginal'
+      : 'closed';
+
+  return { windows, totalOpenDuration, status };
+}
+
+/**
+ * Le résumé doit rester prospectif. Pour aujourd'hui, une plage terminée
+ * (y compris une plage commencée la veille) reste dans le détail chronologique,
+ * mais ne doit plus faire croire que la porte va encore s'ouvrir.
+ */
+function getUpcomingSummary(day: DayPrediction, now: Date): WindowSummary {
+  const windows = isSameDay(day.date, now)
+    ? day.openWindows.filter((w) => w.closeTime.getTime() > now.getTime())
+    : day.openWindows;
+
+  return summarizeWindows(windows);
+}
 
 // ============================================================
 // Construction des prévisions à partir des données réelles du moteur
@@ -116,16 +146,7 @@ function toDayPrediction(td: TideData, date: Date): DayPrediction {
   const eveningBM = bms.length > 1 ? bms[bms.length - 1] : null;
 
   const windows = td.windows;
-  const totalOpenDuration = windows.reduce((sum, w) => sum + w.durationMinutes, 0);
-
-  let status: 'open' | 'marginal' | 'closed';
-  if (totalOpenDuration > 60) {
-    status = 'open';
-  } else if (totalOpenDuration > 0) {
-    status = 'marginal';
-  } else {
-    status = 'closed';
-  }
+  const { totalOpenDuration, status } = summarizeWindows(windows);
 
   let advice: string;
   const totalHours = totalOpenDuration / 60;
@@ -209,9 +230,10 @@ interface DateSelectorProps {
   days: DayPrediction[];
   selectedIndex: number;
   onSelect: (index: number) => void;
+  now: Date;
 }
 
-function DateSelector({ days, selectedIndex, onSelect }: DateSelectorProps) {
+function DateSelector({ days, selectedIndex, onSelect, now }: DateSelectorProps) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -221,6 +243,7 @@ function DateSelector({ days, selectedIndex, onSelect }: DateSelectorProps) {
         {days.map((day, i) => {
           const isToday = isSameDay(day.date, today);
           const isActive = i === selectedIndex;
+          const summaryStatus = getUpcomingSummary(day, now).status;
 
           return (
             <motion.button
@@ -256,9 +279,9 @@ function DateSelector({ days, selectedIndex, onSelect }: DateSelectorProps) {
               {/* Indicateur de porte */}
               <span
                 className={`mt-1 w-1.5 h-1.5 rounded-full ${
-                  day.status === 'open'
+                  summaryStatus === 'open'
                     ? 'bg-status-open'
-                    : day.status === 'marginal'
+                    : summaryStatus === 'marginal'
                       ? 'bg-status-warning'
                       : 'bg-status-closed'
                 }`}
@@ -275,7 +298,7 @@ function DateSelector({ days, selectedIndex, onSelect }: DateSelectorProps) {
 // Section 2: Résumé Hebdomadaire
 // ============================================================
 
-function WeeklySummary({ days, onSelectDay }: { days: DayPrediction[]; onSelectDay: (index: number) => void }) {
+function WeeklySummary({ days, onSelectDay, now }: { days: DayPrediction[]; onSelectDay: (index: number) => void; now: Date }) {
   return (
     <motion.div
       custom={0}
@@ -289,12 +312,16 @@ function WeeklySummary({ days, onSelectDay }: { days: DayPrediction[]; onSelectD
           Résumé de la semaine
         </h2>
         <p className="text-[0.9375rem] text-text-secondary mt-1">
-          Vue d&apos;ensemble des ouvertures de porte
+          Uniquement les ouvertures encore à venir
         </p>
       </div>
 
       <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-4">
-        {days.map((day, i) => (
+        {days.map((day, i) => {
+          const summary = getUpcomingSummary(day, now);
+          const firstWindow = summary.windows[0];
+
+          return (
           <motion.div
             key={i}
             custom={i}
@@ -323,9 +350,9 @@ function WeeklySummary({ days, onSelectDay }: { days: DayPrediction[]; onSelectD
               <span className="font-outfit font-semibold text-[1rem] text-text-primary capitalize">
                 {day.dayNameShort} {format(day.date, 'd', { locale: fr })}
               </span>
-              {day.status === 'open' ? (
+              {summary.status === 'open' ? (
                 <CheckCircle className="w-4 h-4 text-status-open" />
-              ) : day.status === 'marginal' ? (
+              ) : summary.status === 'marginal' ? (
                 <AlertTriangle className="w-4 h-4 text-status-warning" />
               ) : (
                 <XCircle className="w-4 h-4 text-status-closed" />
@@ -335,18 +362,18 @@ function WeeklySummary({ days, onSelectDay }: { days: DayPrediction[]; onSelectD
             {/* Corps */}
             <div className="space-y-1 mb-3">
               <p className="text-[0.9375rem] text-text-secondary">
-                {day.openWindows.length > 0
-                  ? `${day.openWindows.length} ouverture${day.openWindows.length > 1 ? 's' : ''}`
+                {summary.windows.length > 0
+                  ? `${summary.windows.length} ouverture${summary.windows.length > 1 ? 's' : ''}`
                   : 'Fermé'}
               </p>
-              {day.totalOpenDuration > 0 && (
+              {summary.totalOpenDuration > 0 && (
                 <>
                   <p className="font-mono text-[1rem] text-text-accent">
-                    {formatDuration(day.totalOpenDuration)}
+                    {formatDuration(summary.totalOpenDuration)}
                   </p>
-                  {day.openWindows.length > 0 && (
+                  {firstWindow && (
                     <p className="text-[0.8125rem] text-text-secondary">
-                      {fmtTime(day.openWindows[0].openTime)} – {fmtTime(day.openWindows[0].closeTime)}
+                      {fmtTime(firstWindow.openTime)} – {fmtTime(firstWindow.closeTime)}
                     </p>
                   )}
                 </>
@@ -364,20 +391,21 @@ function WeeklySummary({ days, onSelectDay }: { days: DayPrediction[]; onSelectD
 
             {/* Mini-barre visuelle */}
             <div className="mt-3 h-1 rounded-full bg-bg-surface overflow-hidden">
-              {day.totalOpenDuration > 0 && day.openWindows.length > 0 && (
+              {summary.totalOpenDuration > 0 && summary.windows.length > 0 && (
                 <motion.div
                   className="h-full rounded-full bg-status-open"
                   initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(100, (day.totalOpenDuration / (24 * 60)) * 100 * 4)}%` }}
+                  animate={{ width: `${Math.min(100, (summary.totalOpenDuration / (24 * 60)) * 100 * 4)}%` }}
                   transition={{ delay: 0.3, duration: 0.6, ease: easeSmooth }}
                 />
               )}
-              {day.totalOpenDuration === 0 && (
+              {summary.totalOpenDuration === 0 && (
                 <div className="h-full w-full bg-status-closed/30" />
               )}
             </div>
           </motion.div>
-        ))}
+          );
+        })}
       </div>
     </motion.div>
   );
@@ -983,6 +1011,12 @@ export default function Predictions() {
   const [days, setDays] = useState<DayPrediction[] | null>(null);
   const [source, setSource] = useState<TideSource>('shom');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1047,6 +1081,7 @@ export default function Predictions() {
           days={days}
           selectedIndex={selectedDayIndex}
           onSelect={setSelectedDayIndex}
+          now={now}
         />
 
         {/* Contenu scrollable */}
@@ -1055,6 +1090,7 @@ export default function Predictions() {
           <WeeklySummary
             days={days}
             onSelectDay={setSelectedDayIndex}
+            now={now}
           />
 
           {/* Section 3: Tableau des Prévisions */}

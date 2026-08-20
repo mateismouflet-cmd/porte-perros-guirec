@@ -855,16 +855,16 @@ function Timeline({ events, windows }: TimelineProps) {
       if (e.type === 'BM') {
         result.push({
           time: e.time,
-          label: `BM ${fmtTime(e.time)}`,
-          detail: `${e.height.toFixed(2)} m`,
+          label: `Renverse BM ${fmtTime(e.time)}`,
+          detail: `Basse mer · ${e.height.toFixed(2)} m`,
           color: '#2196F3',
           icon: 'BM',
         });
       } else {
         result.push({
           time: e.time,
-          label: `PM ${fmtTime(e.time)}`,
-          detail: `${e.height.toFixed(2)} m`,
+          label: `Renverse PM ${fmtTime(e.time)}`,
+          detail: `Pleine mer · ${e.height.toFixed(2)} m`,
           color: '#4ECDC4',
           icon: 'PM',
         });
@@ -945,7 +945,28 @@ function Timeline({ events, windows }: TimelineProps) {
         Chronologie de la journée
       </h3>
       <p className="text-[0.9375rem] text-text-secondary mb-6">
-        Les horaires réels calculés sans marge de sécurité
+        Porte et renverses de marée (PM/BM), sans marge de sécurité
+      </p>
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        {events.map((event, i) => (
+          <div
+            key={`${event.type}-${event.time.getTime()}-${i}`}
+            className="inline-flex items-center gap-2 rounded-lg border border-[rgba(78,205,196,0.1)] bg-bg-secondary px-3 py-2"
+          >
+            <Waves className={`h-3.5 w-3.5 ${event.type === 'PM' ? 'text-accent-teal' : 'text-accent-ocean'}`} />
+            <span className="text-xs text-text-secondary">
+              Renverse {event.type}
+            </span>
+            <span className="font-mono text-sm text-text-primary">
+              {fmtTime(event.time)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <p className="-mt-3 mb-6 text-[0.75rem] leading-relaxed text-text-muted">
+        Repères indicatifs fondés sur les pleines et basses mers ; le courant local dans le bassin peut se décaler.
       </p>
 
       {/* Timeline bar */}
