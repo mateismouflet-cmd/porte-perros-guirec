@@ -70,6 +70,10 @@ function fmtDate(date: Date): string {
   return format(date, 'EEEE d MMMM yyyy', { locale: fr });
 }
 
+function fmtOpeningDate(date: Date): string {
+  return format(date, "EEEE d MMMM 'à' HH:mm", { locale: fr });
+}
+
 // ============================================================
 // Section 1: Status Card
 // ============================================================
@@ -141,7 +145,7 @@ function StatusCard({ tideData, onRefresh, isLoading }: StatusCardProps) {
       : 'Ouverte';
   } else {
     subStatus = nextWindow
-      ? `Fermée — prochaine ouverture à ${fmtTime(nextWindow.openTime)}`
+      ? `Fermée — prochaine ouverture ${fmtOpeningDate(nextWindow.openTime)}`
       : 'Fermée';
   }
 
@@ -210,6 +214,9 @@ function StatusCard({ tideData, onRefresh, isLoading }: StatusCardProps) {
           <div className="md:min-w-[230px] rounded-xl border border-[rgba(46,204,113,0.18)] bg-[rgba(46,204,113,0.05)] px-4 py-3">
             <p className="font-mono-label text-status-open/80 mb-2">
               Prochaine plage d&apos;ouverture
+            </p>
+            <p className="mb-1 capitalize text-sm text-text-secondary">
+              {format(nextWindow.openTime, 'EEEE d MMMM', { locale: fr })}
             </p>
             <div className="flex items-center gap-2 font-mono text-xl text-text-primary">
               <span>{fmtTime(nextWindow.openTime)}</span>
@@ -1322,7 +1329,10 @@ export default function Home() {
       const correction = pressureEnabled
         ? getPressureCorrection(manualPressure)
         : 0;
-      const data = await getTideDataForDate(new Date(), correction);
+      // La carte principale doit connaître la prochaine ouverture même pendant
+      // plusieurs jours de morte-eau. SHOM publie actuellement jusqu'à J+10 ;
+      // les prévisions détaillées restent volontairement à 7 jours.
+      const data = await getTideDataForDate(new Date(), correction, 10);
       setTideData(data);
       setLastUpdated(new Date());
     } catch {

@@ -432,7 +432,7 @@ function WeeklySummary({ days, onSelectDay, now }: { days: DayPrediction[]; onSe
                         <DayOffsetBadge date={window.openTime} referenceDate={day.date} />
                         {' – '}
                         {fmtTime(window.closeTime)}
-                        <DayOffsetBadge date={window.closeTime} referenceDate={window.openTime} />
+                        <DayOffsetBadge date={window.closeTime} referenceDate={day.date} />
                       </p>
                     ))}
                   </div>
@@ -481,14 +481,16 @@ function PredictionsTable({
   sortColumn,
   sortDirection,
   onSort,
+  now,
 }: {
   days: DayPrediction[];
   onSelectDay: (index: number) => void;
   sortColumn: SortColumn;
   sortDirection: SortDirection;
   onSort: (col: SortColumn) => void;
+  now: Date;
 }) {
-  const today = new Date();
+  const today = new Date(now);
   today.setHours(0, 0, 0, 0);
 
   const sortedDays = useMemo(() => {
@@ -513,7 +515,9 @@ function PredictionsTable({
           break;
         case 'status':
           const statusOrder = { open: 0, marginal: 1, closed: 2 };
-          cmp = statusOrder[a.status] - statusOrder[b.status];
+          const statusA = isSameDay(a.date, now) ? getUpcomingSummary(a, now).status : a.status;
+          const statusB = isSameDay(b.date, now) ? getUpcomingSummary(b, now).status : b.status;
+          cmp = statusOrder[statusA] - statusOrder[statusB];
           break;
         default:
           cmp = 0;
@@ -521,7 +525,7 @@ function PredictionsTable({
       return sortDirection === 'asc' ? cmp : -cmp;
     });
     return sorted;
-  }, [days, sortColumn, sortDirection]);
+  }, [days, sortColumn, sortDirection, now]);
 
   const SortableHeader = ({ col, children, className = '' }: { col: SortColumn; children: React.ReactNode; className?: string }) => (
     <th
@@ -573,6 +577,7 @@ function PredictionsTable({
           <tbody>
             {sortedDays.map((day, i) => {
               const isToday = isSameDay(day.date, today);
+              const displayedStatus = isToday ? getUpcomingSummary(day, now).status : day.status;
               return (
                 <motion.tr
                   key={i}
@@ -644,7 +649,7 @@ function PredictionsTable({
                       day.openWindows.map((w, wi) => (
                         <span key={wi} className="font-mono text-[0.9375rem] font-semibold text-status-closed block">
                           {fmtTime(w.closeTime)}
-                          <DayOffsetBadge date={w.closeTime} referenceDate={w.openTime} />
+                          <DayOffsetBadge date={w.closeTime} referenceDate={day.date} />
                         </span>
                       ))
                     ) : (
@@ -663,12 +668,12 @@ function PredictionsTable({
                     )}
                   </td>
                   <td className="px-4 py-3.5">
-                    {day.status === 'open' ? (
+                    {displayedStatus === 'open' ? (
                       <span className="inline-flex items-center gap-1.5 text-[0.8125rem] bg-status-open/12 text-status-open border border-status-open/25 px-2.5 py-1 rounded-full">
                         <CheckCircle className="w-3 h-3" />
                         Ouvert
                       </span>
-                    ) : day.status === 'marginal' ? (
+                    ) : displayedStatus === 'marginal' ? (
                       <span className="inline-flex items-center gap-1.5 text-[0.8125rem] bg-status-warning/12 text-status-warning border border-status-warning/25 px-2.5 py-1 rounded-full">
                         <AlertTriangle className="w-3 h-3" />
                         Marginal
@@ -691,6 +696,7 @@ function PredictionsTable({
       <div className="md:hidden space-y-3">
         {sortedDays.map((day, i) => {
           const isToday = isSameDay(day.date, today);
+          const displayedStatus = isToday ? getUpcomingSummary(day, now).status : day.status;
           return (
             <motion.div
               key={i}
@@ -710,9 +716,9 @@ function PredictionsTable({
                     {day.dayName} {fmtShortDate(day.date)}
                   </span>
                 </div>
-                {day.status === 'open' ? (
+                {displayedStatus === 'open' ? (
                   <CheckCircle className="w-5 h-5 text-status-open" />
-                ) : day.status === 'marginal' ? (
+                ) : displayedStatus === 'marginal' ? (
                   <AlertTriangle className="w-5 h-5 text-status-warning" />
                 ) : (
                   <XCircle className="w-5 h-5 text-status-closed" />
@@ -752,7 +758,7 @@ function PredictionsTable({
                         <DayOffsetBadge date={w.openTime} referenceDate={day.date} />
                         {' – '}
                         {fmtTime(w.closeTime)}
-                        <DayOffsetBadge date={w.closeTime} referenceDate={w.openTime} />
+                        <DayOffsetBadge date={w.closeTime} referenceDate={day.date} />
                       </p>
                       <p className="font-mono text-text-accent">{formatDuration(w.durationMinutes)}</p>
                     </div>
@@ -803,7 +809,7 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
     const windowLines =
       day.openWindows.length > 0
         ? day.openWindows
-            .map((w) => `Porte ouverte: ${fmtTimeWithDayOffset(w.openTime, day.date)} - ${fmtTimeWithDayOffset(w.closeTime, w.openTime)} (${formatDuration(w.durationMinutes)})`)
+            .map((w) => `Porte ouverte: ${fmtTimeWithDayOffset(w.openTime, day.date)} - ${fmtTimeWithDayOffset(w.closeTime, day.date)} (${formatDuration(w.durationMinutes)})`)
             .join('\n')
         : 'Porte fermée';
     const text = `${fmtDate(day.date)}\n${tideLines}\nCoefficient: ${day.coefLabel}\n${windowLines}`;
@@ -861,7 +867,7 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
       entries.push({
         at: w.closeTime,
         time: fmtTime(w.closeTime),
-        dayOffset: getDayOffset(w.closeTime, w.openTime),
+        dayOffset: getDayOffset(w.closeTime, day.date),
         label: 'Fermeture porte',
         value: closeRule,
         color: 'bg-status-closed',
@@ -1019,7 +1025,7 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
                           <DayOffsetBadge date={w.openTime} referenceDate={day.date} />
                           {' à '}
                           <span className="font-mono text-text-primary">{fmtTime(w.closeTime)}</span>
-                          <DayOffsetBadge date={w.closeTime} referenceDate={w.openTime} />
+                          <DayOffsetBadge date={w.closeTime} referenceDate={day.date} />
                         </span>
                       ))}
                       .
@@ -1179,6 +1185,7 @@ export default function Predictions() {
             sortColumn={sortColumn}
             sortDirection={sortDirection}
             onSort={handleSort}
+            now={now}
           />
 
           {/* Section 4: Vue Jour Détaillée */}

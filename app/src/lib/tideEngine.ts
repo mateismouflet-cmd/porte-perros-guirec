@@ -54,7 +54,7 @@ export interface TideData {
   currentHeight: number;
   isOpen: boolean;
   nextEvent: { type: 'open' | 'close'; time: Date } | null;
-  /** Prochaine plage complète à venir, y compris si elle commence le lendemain */
+  /** Prochaine plage complète à venir dans l'horizon de données chargé */
   nextWindow: TideWindow | null;
   pressure: number;
   pressureCorrection: number;
@@ -176,6 +176,7 @@ function setCache(key: string, data: unknown): void {
 // PM 14:44 — ce n'est PAS de l'UTC+1, ne pas ajouter d'offset). On parse donc
 // en heure locale du navigateur, l'app étant destinée à un usage en France.
 const SHOM_CACHE_TTL_MIN = 7 * 24 * 60; // les prédictions sont déterministes
+const SHOM_MAX_DURATION_DAYS = 7; // l'API renvoie 400 au-delà de 7 jours
 
 interface ShomDayRaw {
   /** lignes hlt : [type, "HH:MM", "H.HH", coef] */
@@ -229,15 +230,22 @@ async function ensureShomDays(start: Date, count: number): Promise<boolean> {
     // plage à 2 jours minimum (les jours en trop sont déterministes et mis en
     // cache, donc gratuits). Sans ça, un rafraîchissement quotidien qui ne
     // manque qu'un jour basculerait à tort sur Open-Meteo.
-    const span = Math.max(
-      2,
-      Math.round(
-        (new Date(`${last}T00:00:00`).getTime() -
-          new Date(`${first}T00:00:00`).getTime()) /
-          86400000
-      ) + 1
-    );
-    await fetchShomSpan(first, span);
+    const firstDate = new Date(`${first}T00:00:00`);
+    const totalSpan = Math.round(
+      (new Date(`${last}T00:00:00`).getTime() - firstDate.getTime()) / 86400000
+    ) + 1;
+
+    // SHOM limite duration à 7 jours. Une recherche étendue de la prochaine
+    // ouverture est donc découpée en lots compatibles, toujours avec au moins
+    // 2 jours car duration=1 est également refusé par l'endpoint hlt.
+    for (let offset = 0; offset < totalSpan; offset += SHOM_MAX_DURATION_DAYS) {
+      const remaining = totalSpan - offset;
+      const duration = Math.max(2, Math.min(SHOM_MAX_DURATION_DAYS, remaining));
+      await fetchShomSpan(
+        formatDateKey(addDays(firstDate, offset)),
+        duration
+      );
+    }
     // Vérifier que tout est bien arrivé
     return missing.every(
       (k) => getCached<ShomDayRaw>(shomDayCacheKey(k), SHOM_CACHE_TTL_MIN) !== null
@@ -274,20 +282,21 @@ function parseShomDay(dayKey: string, raw: ShomDayRaw): {
 }
 
 /**
- * Charge les données SHOM couvrant [date - 1, date + 1] (nécessaire pour les
- * fenêtres à cheval sur minuit et le passage heure standard → heure locale).
+ * Charge les données SHOM couvrant [date - 1, date + futureDays]. Le jour
+ * précédent est nécessaire pour les fenêtres à cheval sur minuit.
  */
-async function getShomRange(date: Date): Promise<{
+async function getShomRange(date: Date, futureDays = 1): Promise<{
   events: TideEvent[];
   curve: HourlyTideData[];
 } | null> {
   const start = addDays(date, -1);
-  const ok = await ensureShomDays(start, 3);
+  const dayCount = futureDays + 2;
+  const ok = await ensureShomDays(start, dayCount);
   if (!ok) return null;
 
   const events: TideEvent[] = [];
   const curve: HourlyTideData[] = [];
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < dayCount; i++) {
     const key = formatDateKey(addDays(start, i));
     const raw = getCached<ShomDayRaw>(shomDayCacheKey(key), SHOM_CACHE_TTL_MIN);
     if (!raw) return null;
@@ -304,13 +313,13 @@ async function getShomRange(date: Date): Promise<{
 // Source de repli : Open-Meteo Marine (calibrée sur le SHOM)
 // ============================================================
 
-async function getOpenMeteoRange(date: Date): Promise<{
+async function getOpenMeteoRange(date: Date, futureDays = 1): Promise<{
   events: TideEvent[];
   curve: HourlyTideData[];
 } | null> {
   const startKey = formatDateKey(addDays(date, -1));
-  const endKey = formatDateKey(addDays(date, 1));
-  const cacheKey = `om-range-v2-${startKey}`;
+  const endKey = formatDateKey(addDays(date, futureDays));
+  const cacheKey = `om-range-v3-${startKey}-${endKey}`;
 
   let raw = getCached<{ times: string[]; heights: number[] }>(cacheKey, 30);
   if (!raw) {
@@ -372,12 +381,11 @@ async function getOpenMeteoRange(date: Date): Promise<{
 // Dernier recours : journée type embarquée
 // ============================================================
 
-function getMockRange(date: Date): { events: TideEvent[]; curve: HourlyTideData[] } {
-  const hourly = [
-    ...generateMockDataForDate(addDays(date, -1)),
-    ...generateMockDataForDate(date),
-    ...generateMockDataForDate(addDays(date, 1)),
-  ];
+function getMockRange(date: Date, futureDays = 1): { events: TideEvent[]; curve: HourlyTideData[] } {
+  const hourly: HourlyTideData[] = [];
+  for (let dayOffset = -1; dayOffset <= futureDays; dayOffset++) {
+    hourly.push(...generateMockDataForDate(addDays(date, dayOffset)));
+  }
   const events = detectPMBM(hourly);
   const curve: HourlyTideData[] = [];
   if (events.length >= 2) {
@@ -694,18 +702,19 @@ export function calculateWindows(events: TideEvent[]): TideWindow[] {
 
 export async function getTideDataForDate(
   date: Date,
-  pressureCorrection: number
+  pressureCorrection: number,
+  futureDays = 1
 ): Promise<TideData> {
   // 1. Source de données : SHOM → Open-Meteo calibré → mock
   let source: TideSource = 'shom';
-  let range = await getShomRange(date);
+  let range = await getShomRange(date, futureDays);
   if (!range) {
     source = 'openmeteo';
-    range = await getOpenMeteoRange(date);
+    range = await getOpenMeteoRange(date, futureDays);
   }
   if (!range) {
     source = 'mock';
-    range = getMockRange(date);
+    range = getMockRange(date, futureDays);
   }
 
   // 2. Correction barométrique : décalage uniforme des hauteurs
@@ -713,7 +722,7 @@ export async function getTideDataForDate(
   const events = range.events.map((e) => ({ ...e, height: e.height + correction }));
   const curve = range.curve.map((p) => ({ ...p, height: p.height + correction }));
 
-  // 3. Fenêtres d'ouverture sur l'ensemble de l'intervalle (j-1 → j+1)
+  // 3. Fenêtres d'ouverture sur l'ensemble de l'intervalle chargé
   const allWindows = calculateWindowsFromCurve(curve, events);
 
   // 4. Restriction au jour demandé (jour calendaire local)
