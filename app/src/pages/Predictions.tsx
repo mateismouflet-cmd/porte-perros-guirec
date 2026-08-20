@@ -26,6 +26,7 @@ import {
 import {
   format,
   addDays,
+  differenceInCalendarDays,
   isSameDay,
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -115,12 +116,22 @@ function summarizeWindows(windows: TideWindow[]): WindowSummary {
 /**
  * Le résumé doit rester prospectif. Pour aujourd'hui, une plage terminée
  * (y compris une plage commencée la veille) reste dans le détail chronologique,
- * mais ne doit plus faire croire que la porte va encore s'ouvrir.
+ * mais ne doit plus faire croire que la porte va encore s'ouvrir. Pour les
+ * jours suivants, chaque plage est rattachée uniquement à son jour d'ouverture
+ * afin de ne pas la compter une seconde fois le lendemain.
  */
 function getUpcomingSummary(day: DayPrediction, now: Date): WindowSummary {
-  const windows = isSameDay(day.date, now)
-    ? day.openWindows.filter((w) => w.closeTime.getTime() > now.getTime())
-    : day.openWindows;
+  const isToday = isSameDay(day.date, now);
+  const nowMs = now.getTime();
+  const windows = day.openWindows.filter((w) => {
+    const startsOnDisplayedDay = isSameDay(w.openTime, day.date);
+
+    if (!isToday) return startsOnDisplayedDay;
+    if (w.closeTime.getTime() <= nowMs) return false;
+
+    const isAlreadyOpen = w.openTime.getTime() <= nowMs;
+    return startsOnDisplayedDay || isAlreadyOpen;
+  });
 
   return summarizeWindows(windows);
 }
@@ -222,6 +233,50 @@ function fmtShortDate(date: Date): string {
   return format(date, 'd MMM', { locale: fr });
 }
 
+function getDayOffset(date: Date, referenceDate: Date): number {
+  return differenceInCalendarDays(date, referenceDate);
+}
+
+function fmtDayOffset(offset: number): string {
+  if (offset === 0) return '';
+  return offset > 0 ? `+${offset} j` : `−${Math.abs(offset)} j`;
+}
+
+function fmtTimeWithDayOffset(date: Date, referenceDate: Date): string {
+  const offset = getDayOffset(date, referenceDate);
+  return `${fmtTime(date)}${offset === 0 ? '' : ` ${fmtDayOffset(offset)}`}`;
+}
+
+function DayOffsetBadge({
+  date,
+  referenceDate,
+  offset: explicitOffset,
+}: {
+  date?: Date;
+  referenceDate?: Date;
+  offset?: number;
+}) {
+  const offset = explicitOffset ?? (date && referenceDate ? getDayOffset(date, referenceDate) : 0);
+  if (offset === 0) return null;
+
+  const direction = offset > 0 ? 'après' : 'avant';
+  const dayCount = Math.abs(offset);
+
+  return (
+    <sup
+      className={`ml-1 inline-flex -translate-y-0.5 rounded px-1 py-0.5 font-mono text-[0.625rem] font-semibold leading-none ${
+        offset > 0
+          ? 'bg-sun-gold/15 text-sun-gold'
+          : 'bg-accent-ocean/15 text-accent-ocean'
+      }`}
+      title={`${dayCount} jour${dayCount > 1 ? 's' : ''} ${direction}`}
+      aria-label={`${dayCount} jour${dayCount > 1 ? 's' : ''} ${direction}`}
+    >
+      {fmtDayOffset(offset)}
+    </sup>
+  );
+}
+
 // ============================================================
 // Section 1: Sélecteur de Date
 // ============================================================
@@ -319,7 +374,6 @@ function WeeklySummary({ days, onSelectDay, now }: { days: DayPrediction[]; onSe
       <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-4">
         {days.map((day, i) => {
           const summary = getUpcomingSummary(day, now);
-          const firstWindow = summary.windows[0];
 
           return (
           <motion.div
@@ -371,11 +425,17 @@ function WeeklySummary({ days, onSelectDay, now }: { days: DayPrediction[]; onSe
                   <p className="font-mono text-[1rem] text-text-accent">
                     {formatDuration(summary.totalOpenDuration)}
                   </p>
-                  {firstWindow && (
-                    <p className="text-[0.8125rem] text-text-secondary">
-                      {fmtTime(firstWindow.openTime)} – {fmtTime(firstWindow.closeTime)}
-                    </p>
-                  )}
+                  <div className="space-y-0.5">
+                    {summary.windows.map((window, windowIndex) => (
+                      <p key={windowIndex} className="whitespace-nowrap text-[0.8125rem] text-text-secondary">
+                        {fmtTime(window.openTime)}
+                        <DayOffsetBadge date={window.openTime} referenceDate={day.date} />
+                        {' – '}
+                        {fmtTime(window.closeTime)}
+                        <DayOffsetBadge date={window.closeTime} referenceDate={window.openTime} />
+                      </p>
+                    ))}
+                  </div>
                 </>
               )}
             </div>
@@ -572,6 +632,7 @@ function PredictionsTable({
                       day.openWindows.map((w, wi) => (
                         <span key={wi} className="font-mono text-[0.9375rem] font-semibold text-status-open block">
                           {fmtTime(w.openTime)}
+                          <DayOffsetBadge date={w.openTime} referenceDate={day.date} />
                         </span>
                       ))
                     ) : (
@@ -583,6 +644,7 @@ function PredictionsTable({
                       day.openWindows.map((w, wi) => (
                         <span key={wi} className="font-mono text-[0.9375rem] font-semibold text-status-closed block">
                           {fmtTime(w.closeTime)}
+                          <DayOffsetBadge date={w.closeTime} referenceDate={w.openTime} />
                         </span>
                       ))
                     ) : (
@@ -685,7 +747,13 @@ function PredictionsTable({
                   </div>
                   {day.openWindows.map((w, wi) => (
                     <div key={wi} className="flex items-center justify-between">
-                      <p className="font-mono text-status-open">{fmtTime(w.openTime)} – {fmtTime(w.closeTime)}</p>
+                      <p className="font-mono text-status-open">
+                        {fmtTime(w.openTime)}
+                        <DayOffsetBadge date={w.openTime} referenceDate={day.date} />
+                        {' – '}
+                        {fmtTime(w.closeTime)}
+                        <DayOffsetBadge date={w.closeTime} referenceDate={w.openTime} />
+                      </p>
                       <p className="font-mono text-text-accent">{formatDuration(w.durationMinutes)}</p>
                     </div>
                   ))}
@@ -735,7 +803,7 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
     const windowLines =
       day.openWindows.length > 0
         ? day.openWindows
-            .map((w) => `Porte ouverte: ${fmtTime(w.openTime)} - ${fmtTime(w.closeTime)} (${formatDuration(w.durationMinutes)})`)
+            .map((w) => `Porte ouverte: ${fmtTimeWithDayOffset(w.openTime, day.date)} - ${fmtTimeWithDayOffset(w.closeTime, w.openTime)} (${formatDuration(w.durationMinutes)})`)
             .join('\n')
         : 'Porte fermée';
     const text = `${fmtDate(day.date)}\n${tideLines}\nCoefficient: ${day.coefLabel}\n${windowLines}`;
@@ -749,13 +817,14 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
 
   // Points clés chronologiques : marées et mouvements de porte entremêlés
   const keyEvents = useMemo(() => {
-    const entries: { at: Date; time: string; label: string; value: string; color: string }[] = [];
+    const entries: { at: Date; time: string; dayOffset: number; label: string; value: string; color: string }[] = [];
 
     for (const e of day.events) {
       if (e.type === 'PM') {
         entries.push({
           at: e.time,
           time: fmtTime(e.time),
+          dayOffset: 0,
           label: 'Pleine Mer',
           value: `${e.height.toFixed(2)} m${e.coefficient !== undefined ? ` — Coefficient ${e.coefficient}` : ''}`,
           color: 'bg-accent-teal',
@@ -764,6 +833,7 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
         entries.push({
           at: e.time,
           time: fmtTime(e.time),
+          dayOffset: 0,
           label: 'Basse Mer',
           value: `${e.height.toFixed(2)} m`,
           color: 'bg-accent-ocean',
@@ -775,6 +845,7 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
       entries.push({
         at: w.openTime,
         time: fmtTime(w.openTime),
+        dayOffset: getDayOffset(w.openTime, day.date),
         label: 'Ouverture porte',
         value: '≥ 7.30 m (marée montante)',
         color: 'bg-status-open',
@@ -790,6 +861,7 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
       entries.push({
         at: w.closeTime,
         time: fmtTime(w.closeTime),
+        dayOffset: getDayOffset(w.closeTime, w.openTime),
         label: 'Fermeture porte',
         value: closeRule,
         color: 'bg-status-closed',
@@ -905,7 +977,12 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
                   )}
                 </div>
                 <div className="flex-1">
-                  <p className="font-mono text-[0.875rem] text-text-primary font-medium">{event.time}</p>
+                  <p className="font-mono text-[0.875rem] text-text-primary font-medium">
+                    {event.time}
+                    {event.dayOffset !== 0 && (
+                      <DayOffsetBadge offset={event.dayOffset} />
+                    )}
+                  </p>
                   <p className="text-[0.8125rem] text-text-secondary">{event.label}</p>
                   <p className="text-[0.8125rem] text-text-accent">{event.value}</p>
                 </div>
@@ -939,8 +1016,10 @@ function DayDetailView({ day, dayIndex }: { day: DayPrediction; dayIndex: number
                           </span>
                           {' de '}
                           <span className="font-mono text-text-primary">{fmtTime(w.openTime)}</span>
+                          <DayOffsetBadge date={w.openTime} referenceDate={day.date} />
                           {' à '}
                           <span className="font-mono text-text-primary">{fmtTime(w.closeTime)}</span>
+                          <DayOffsetBadge date={w.closeTime} referenceDate={w.openTime} />
                         </span>
                       ))}
                       .
