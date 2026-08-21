@@ -75,8 +75,8 @@ export default function Navbar({ lastUpdated }: NavbarProps) {
         {/* Gauche : Logo */}
         <div className="flex items-center gap-2.5">
           <Anchor className="w-5 h-5 text-accent-teal" />
-          <span className="font-outfit font-semibold text-[1.125rem] text-text-primary hidden sm:inline">
-            Marées Perros-Guirec
+          <span className="hidden whitespace-nowrap font-outfit font-semibold text-[0.9375rem] text-text-primary lg:inline xl:text-[1.125rem]">
+            Ouverture du bassin à flot de Perros-Guirec
           </span>
         </div>
 

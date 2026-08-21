@@ -11,7 +11,6 @@ import {
   Unlock,
   RefreshCw,
   RotateCcw,
-  ExternalLink,
   AlertTriangle,
 } from 'lucide-react';
 import {
@@ -35,7 +34,13 @@ import {
   getInterpolatedHeight,
   GATE_OPEN_HEIGHT,
 } from '@/lib/tideEngine';
-import type { TideData, TideEvent, TideWindow, HourlyTideData } from '@/lib/tideEngine';
+import type {
+  TideData,
+  TideEvent,
+  TideReversal,
+  TideWindow,
+  HourlyTideData,
+} from '@/lib/tideEngine';
 
 // ============================================================
 // Animation helpers
@@ -734,108 +739,12 @@ function MetricsRow({
 }
 
 // ============================================================
-// Section 4a: Détails PM/BM
-// ============================================================
-
-interface TideDetailsProps {
-  events: TideEvent[];
-}
-
-function TideDetails({ events }: TideDetailsProps) {
-  const pmEvents = events.filter((e) => e.type === 'PM');
-  const bmEvents = events.filter((e) => e.type === 'BM');
-
-  return (
-    <motion.div
-      custom={3}
-      variants={cardVariants}
-      initial="hidden"
-      animate="visible"
-      className="gradient-surface rounded-2xl border border-[rgba(78,205,196,0.06)] p-6 shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
-    >
-      <h3 className="font-outfit font-semibold text-xl text-text-primary mb-4">
-        Marées du jour
-      </h3>
-
-      <div className="space-y-4">
-        {/* PM */}
-        {pmEvents.map((pm, i) => (
-          <motion.div
-            key={`pm-${i}`}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35 + i * 0.1, duration: 0.35, ease: easeSmooth }}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <ArrowUp className="w-4 h-4 text-accent-teal" />
-              <span className="font-outfit font-semibold text-base text-text-secondary">
-                Pleine Mer
-              </span>
-            </div>
-            <div className="flex items-baseline gap-3 ml-6">
-              <span className="font-data-medium text-text-primary">
-                {fmtTime(pm.time)}
-              </span>
-              <span className="font-data-small text-accent-teal">
-                {pm.height.toFixed(2)} m
-              </span>
-            </div>
-            {i < pmEvents.length - 1 && (
-              <div className="ml-6 mt-3 border-b border-[rgba(78,205,196,0.06)]" />
-            )}
-          </motion.div>
-        ))}
-
-        {/* BM */}
-        {bmEvents.map((bm, i) => (
-          <motion.div
-            key={`bm-${i}`}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 + i * 0.1, duration: 0.35, ease: easeSmooth }}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <ArrowDown className="w-4 h-4 text-accent-ocean" />
-              <span className="font-outfit font-semibold text-base text-text-secondary">
-                Basse Mer
-              </span>
-            </div>
-            <div className="flex items-baseline gap-3 ml-6">
-              <span className="font-data-medium text-text-primary">
-                {fmtTime(bm.time)}
-              </span>
-              <span className="font-data-small text-accent-ocean">
-                {bm.height.toFixed(2)} m
-              </span>
-            </div>
-            {i < bmEvents.length - 1 && (
-              <div className="ml-6 mt-3 border-b border-[rgba(78,205,196,0.06)]" />
-            )}
-          </motion.div>
-        ))}
-      </div>
-
-      <p className="mt-4 pt-3 border-t border-[rgba(78,205,196,0.06)] text-[0.8125rem] text-text-muted">
-        Corrections Perros-Guirec appliquées (SHOM)
-        <a
-          href="https://maree.shom.fr/harbor/PERROS-GUIREC_TRESTRAOU/hlt/0"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-0.5 ml-1.5 text-accent-teal hover:text-accent-teal/80 transition-colors"
-        >
-          <ExternalLink className="w-3 h-3" />
-        </a>
-      </p>
-    </motion.div>
-  );
-}
-
-// ============================================================
 // Section 4b: Timeline
 // ============================================================
 
 interface TimelineProps {
   events: TideEvent[];
+  reversals: TideReversal[];
   windows: TideWindow[];
 }
 
@@ -844,10 +753,10 @@ interface TimelineItem {
   label: string;
   detail: string;
   color: string;
-  icon: 'BM' | 'PM' | 'open' | 'close';
+  icon: 'BM' | 'PM' | 'endEbb' | 'endFlood' | 'open' | 'close';
 }
 
-function Timeline({ events, windows }: TimelineProps) {
+function Timeline({ events, reversals, windows }: TimelineProps) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -862,7 +771,7 @@ function Timeline({ events, windows }: TimelineProps) {
       if (e.type === 'BM') {
         result.push({
           time: e.time,
-          label: `Renverse BM ${fmtTime(e.time)}`,
+          label: `BM ${fmtTime(e.time)}`,
           detail: `Basse mer · ${e.height.toFixed(2)} m`,
           color: '#2196F3',
           icon: 'BM',
@@ -870,12 +779,23 @@ function Timeline({ events, windows }: TimelineProps) {
       } else {
         result.push({
           time: e.time,
-          label: `Renverse PM ${fmtTime(e.time)}`,
+          label: `PM ${fmtTime(e.time)}`,
           detail: `Pleine mer · ${e.height.toFixed(2)} m`,
           color: '#4ECDC4',
           icon: 'PM',
         });
       }
+    }
+
+    for (const reversal of reversals) {
+      const isEndEbb = reversal.type === 'fin_jusant';
+      result.push({
+        time: reversal.time,
+        label: `${isEndEbb ? 'Fin du jusant' : 'Fin du flot'} ${fmtTime(reversal.time)}`,
+        detail: isEndEbb ? '5 h avant la PM' : '1 h 30 après la PM',
+        color: isEndEbb ? '#2196F3' : '#4ECDC4',
+        icon: isEndEbb ? 'endEbb' : 'endFlood',
+      });
     }
 
     for (const w of windows) {
@@ -897,7 +817,7 @@ function Timeline({ events, windows }: TimelineProps) {
 
     result.sort((a, b) => a.time.getTime() - b.time.getTime());
     return result;
-  }, [events, windows]);
+  }, [events, reversals, windows]);
 
   const dayStart = new Date(now);
   dayStart.setHours(0, 0, 0, 0);
@@ -951,30 +871,6 @@ function Timeline({ events, windows }: TimelineProps) {
       <h3 className="font-outfit font-semibold text-xl text-text-primary mb-1">
         Chronologie de la journée
       </h3>
-      <p className="text-[0.9375rem] text-text-secondary mb-6">
-        Porte et renverses de marée (PM/BM), sans marge de sécurité
-      </p>
-
-      <div className="mb-6 flex flex-wrap gap-2">
-        {events.map((event, i) => (
-          <div
-            key={`${event.type}-${event.time.getTime()}-${i}`}
-            className="inline-flex items-center gap-2 rounded-lg border border-[rgba(78,205,196,0.1)] bg-bg-secondary px-3 py-2"
-          >
-            <Waves className={`h-3.5 w-3.5 ${event.type === 'PM' ? 'text-accent-teal' : 'text-accent-ocean'}`} />
-            <span className="text-xs text-text-secondary">
-              Renverse {event.type}
-            </span>
-            <span className="font-mono text-sm text-text-primary">
-              {fmtTime(event.time)}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <p className="-mt-3 mb-6 text-[0.75rem] leading-relaxed text-text-muted">
-        Repères indicatifs fondés sur les pleines et basses mers ; le courant local dans le bassin peut se décaler.
-      </p>
 
       {/* Timeline bar */}
       <div className="relative mb-14 mt-20">
@@ -1140,6 +1036,12 @@ function Timeline({ events, windows }: TimelineProps) {
                       {item.icon === 'BM' && (
                         <ArrowDown className="w-3.5 h-3.5 text-accent-ocean" />
                       )}
+                      {item.icon === 'endEbb' && (
+                        <Waves className="w-3.5 h-3.5 text-accent-ocean" />
+                      )}
+                      {item.icon === 'endFlood' && (
+                        <Waves className="w-3.5 h-3.5 text-accent-teal" />
+                      )}
                       {isOpening && (
                         <Unlock className="w-3.5 h-3.5 text-status-open" />
                       )}
@@ -1159,9 +1061,13 @@ function Timeline({ events, windows }: TimelineProps) {
                           ? 'Pleine Mer'
                           : item.icon === 'BM'
                             ? 'Basse Mer'
-                            : isOpening
-                              ? 'Ouverture'
-                              : 'Fermeture'}
+                            : item.icon === 'endEbb'
+                              ? 'Fin du jusant'
+                              : item.icon === 'endFlood'
+                                ? 'Fin du flot'
+                                : isOpening
+                                  ? 'Ouverture'
+                                  : 'Fermeture'}
                       </span>
                     </div>
                   </td>
@@ -1460,7 +1366,6 @@ export default function Home() {
             currentHeight={tideData.currentHeight}
             curve={tideData.curve}
           />
-          <TideDetails events={tideData.events} />
         </div>
       </div>
 
@@ -1512,7 +1417,11 @@ export default function Home() {
 
       {/* Timeline - pleine largeur */}
       <div className="mt-6">
-        <Timeline events={tideData.events} windows={tideData.windows} />
+        <Timeline
+          events={tideData.events}
+          reversals={tideData.reversals}
+          windows={tideData.windows}
+        />
       </div>
     </Layout>
   );

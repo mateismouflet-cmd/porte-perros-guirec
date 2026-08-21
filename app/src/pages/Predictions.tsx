@@ -367,7 +367,7 @@ function WeeklySummary({ days, onSelectDay, now }: { days: DayPrediction[]; onSe
           Prévisions à 7 jours
         </h2>
         <p className="text-[0.9375rem] text-text-secondary mt-1">
-          Uniquement les ouvertures encore à venir
+          Uniquement les ouvertures à venir
         </p>
       </div>
 
@@ -676,7 +676,7 @@ function PredictionsTable({
                     ) : displayedStatus === 'marginal' ? (
                       <span className="inline-flex items-center gap-1.5 text-[0.8125rem] bg-status-warning/12 text-status-warning border border-status-warning/25 px-2.5 py-1 rounded-full">
                         <AlertTriangle className="w-3 h-3" />
-                        Marginal
+                        Incertitude
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 text-[0.8125rem] bg-status-closed/12 text-status-closed border border-status-closed/25 px-2.5 py-1 rounded-full">

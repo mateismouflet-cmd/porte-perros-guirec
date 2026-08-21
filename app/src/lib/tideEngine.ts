@@ -35,6 +35,15 @@ export interface TideWindow {
   durationMinutes: number;
 }
 
+export type TideReversalType = 'fin_jusant' | 'fin_flot';
+
+export interface TideReversal {
+  time: Date;
+  type: TideReversalType;
+  /** Pleine mer utilisée comme référence pour le calcul de la renverse. */
+  referencePmTime: Date;
+}
+
 export interface HourlyTideData {
   time: Date;
   height: number;
@@ -49,6 +58,8 @@ export type TideSource = 'shom' | 'openmeteo' | 'mock';
 
 export interface TideData {
   events: TideEvent[];
+  /** Renverses calculées qui tombent pendant le jour local demandé. */
+  reversals: TideReversal[];
   windows: TideWindow[];
   coefficient: number;
   currentHeight: number;
@@ -132,6 +143,47 @@ function isSameLocalDay(a: Date, b: Date): boolean {
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
   );
+}
+
+/**
+ * Repères de courant fournis pour le bassin :
+ * - fin du jusant : 5 heures avant la pleine mer ;
+ * - fin du flot : 1 heure 30 après la pleine mer.
+ *
+ * Les événements reçus couvrent la veille, le jour et le lendemain afin
+ * qu'une renverse proche de minuit reste rattachée au bon jour civil.
+ */
+export function calculateTideReversals(
+  events: TideEvent[],
+  targetDate: Date
+): TideReversal[] {
+  const reversals: TideReversal[] = [];
+
+  for (const event of events) {
+    if (event.type !== 'PM') continue;
+
+    const endEbb = new Date(event.time);
+    endEbb.setMinutes(endEbb.getMinutes() - 5 * 60);
+    const endFlood = new Date(event.time);
+    endFlood.setMinutes(endFlood.getMinutes() + 90);
+
+    reversals.push(
+      {
+        time: endEbb,
+        type: 'fin_jusant',
+        referencePmTime: new Date(event.time),
+      },
+      {
+        time: endFlood,
+        type: 'fin_flot',
+        referencePmTime: new Date(event.time),
+      }
+    );
+  }
+
+  return reversals
+    .filter((reversal) => isSameLocalDay(reversal.time, targetDate))
+    .sort((a, b) => a.time.getTime() - b.time.getTime());
 }
 
 // ============================================================
@@ -731,6 +783,7 @@ export async function getTideDataForDate(
   const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);
 
   const dayEvents = events.filter((e) => isSameLocalDay(e.time, date));
+  const dayReversals = calculateTideReversals(events, date);
   const dayWindows = allWindows.filter(
     (w) => w.closeTime.getTime() > dayStart.getTime() && w.openTime.getTime() < dayEnd.getTime()
   );
@@ -787,6 +840,7 @@ export async function getTideDataForDate(
 
   return {
     events: dayEvents,
+    reversals: dayReversals,
     windows: dayWindows,
     coefficient: Math.round(coefficient),
     currentHeight,

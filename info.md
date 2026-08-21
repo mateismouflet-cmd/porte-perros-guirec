@@ -83,6 +83,11 @@ Si P = 983 hPa → Δh = +0.30m (niveau plus haut)
   - Si H_PM > 7.6m (resp. 8m) → fermeture à 7.60m (coef < 70) ou 8m (coef > 70) à marée descendante
   - Si H_PM < 7.6m → fermeture à la PM
 
+### Repères de renverse dans le bassin
+- **Fin du jusant** : 5 heures avant chaque pleine mer (PM)
+- **Fin du flot** : 1 heure 30 après chaque pleine mer (PM)
+- Ces horaires sont des repères calculés. Une renverse proche de minuit peut être rattachée à une PM de la veille ou du lendemain.
+
 ### Marges de sécurité capitainerie
 La capitainerie publie avec marge de sécurité (ex: calcul 16h30 → publié 16h). Ce qui est restrictif sur 2h d'ouverture. La porte ferme plutôt vers l'heure réelle calculée.
 

@@ -38,4 +38,5 @@ Construire une application web (dashboard) pour prédire les horaires d'ouvertur
 - Ouverture à 7,30 m
 - Fermeture cas 1 (PM > 7,6m): à 7,60m (coef < 70) ou 8m (coef > 70) à marée descendante
 - Fermeture cas 2 (PM < 7,6m): fermeture à la PM
+- Repères de renverse: fin du jusant 5h avant la PM; fin du flot 1h30 après la PM
 - Marge capitainerie: ils publient avec marge de sécurité (ex: 16h30 réel → 16h publié)

@@ -39,9 +39,14 @@ export default function Footer() {
             <ExternalLink className="w-3 h-3" />
           </a>
         </div>
-        <p className="text-text-muted text-xs">
-          À titre indicatif — vérifier toujours auprès de la capitainerie
-        </p>
+        <div className="text-center sm:text-right">
+          <p className="text-text-muted text-xs">
+            À titre indicatif — vérifier toujours auprès de la capitainerie
+          </p>
+          <p className="mt-1 text-[11px] text-text-muted/70">
+            Application révisée le 21 août 2026
+          </p>
+        </div>
       </div>
       {visites !== null && (
         <p
