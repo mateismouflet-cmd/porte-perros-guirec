@@ -791,7 +791,7 @@ function Timeline({ events, reversals, windows }: TimelineProps) {
       const isEndEbb = reversal.type === 'fin_jusant';
       result.push({
         time: reversal.time,
-        label: `${isEndEbb ? 'Fin du jusant' : 'Fin du flot'} ${fmtTime(reversal.time)}`,
+        label: `${isEndEbb ? 'Début du flot' : 'Début du jusant'} ${fmtTime(reversal.time)}`,
         detail: isEndEbb ? '5 h avant la PM' : '1 h 30 après la PM',
         color: isEndEbb ? '#2196F3' : '#4ECDC4',
         icon: isEndEbb ? 'endEbb' : 'endFlood',
@@ -1062,9 +1062,9 @@ function Timeline({ events, reversals, windows }: TimelineProps) {
                           : item.icon === 'BM'
                             ? 'Basse Mer'
                             : item.icon === 'endEbb'
-                              ? 'Fin du jusant'
+                              ? 'Début du flot'
                               : item.icon === 'endFlood'
-                                ? 'Fin du flot'
+                                ? 'Début du jusant'
                                 : isOpening
                                   ? 'Ouverture'
                                   : 'Fermeture'}
