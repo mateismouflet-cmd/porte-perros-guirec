@@ -263,7 +263,7 @@ async function fetchShomSpan(startKey: string, duration: number): Promise<void> 
  */
 let shomUnavailableUntil = 0;
 
-async function ensureShomDays(start: Date, count: number): Promise<boolean> {
+export async function ensureShomDays(start: Date, count: number): Promise<boolean> {
   const missing: string[] = [];
   for (let i = 0; i < count; i++) {
     const key = formatDateKey(addDays(start, i));
@@ -277,24 +277,28 @@ async function ensureShomDays(start: Date, count: number): Promise<boolean> {
   try {
     const first = missing[0];
     const last = missing[missing.length - 1];
-    // L'endpoint SHOM spm/hlt renvoie 403 pour une demande d'UN seul jour
-    // (duration=1) ; dès 2 jours il répond normalement. On élargit donc toute
-    // plage à 2 jours minimum (les jours en trop sont déterministes et mis en
-    // cache, donc gratuits). Sans ça, un rafraîchissement quotidien qui ne
-    // manque qu'un jour basculerait à tort sur Open-Meteo.
+    // L'endpoint SHOM spm/hlt refuse une demande d'UN seul jour (duration=1) ;
+    // dès 2 jours il répond normalement. Lorsqu'il ne reste qu'un jour à
+    // charger, on redemande donc aussi le jour PRÉCÉDENT. Celui-ci est déjà
+    // publié (et généralement déjà en cache), contrairement au jour suivant
+    // qui peut dépasser l'horizon SHOM et provoquer une erreur HTTP 400.
     const firstDate = new Date(`${first}T00:00:00`);
     const totalSpan = Math.round(
       (new Date(`${last}T00:00:00`).getTime() - firstDate.getTime()) / 86400000
     ) + 1;
 
     // SHOM limite duration à 7 jours. Une recherche étendue de la prochaine
-    // ouverture est donc découpée en lots compatibles, toujours avec au moins
-    // 2 jours car duration=1 est également refusé par l'endpoint hlt.
+    // ouverture est donc découpée en lots compatibles. Un éventuel reliquat
+    // d'un jour est regroupé avec le jour qui le précède.
     for (let offset = 0; offset < totalSpan; offset += SHOM_MAX_DURATION_DAYS) {
       const remaining = totalSpan - offset;
-      const duration = Math.max(2, Math.min(SHOM_MAX_DURATION_DAYS, remaining));
+      const isSingleDayRemainder = remaining === 1;
+      const fetchStart = addDays(firstDate, offset - (isSingleDayRemainder ? 1 : 0));
+      const duration = isSingleDayRemainder
+        ? 2
+        : Math.min(SHOM_MAX_DURATION_DAYS, remaining);
       await fetchShomSpan(
-        formatDateKey(addDays(firstDate, offset)),
+        formatDateKey(fetchStart),
         duration
       );
     }

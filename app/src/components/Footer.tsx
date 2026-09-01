@@ -44,7 +44,7 @@ export default function Footer() {
             À titre indicatif — vérifier toujours auprès de la capitainerie
           </p>
           <p className="mt-1 text-[11px] text-text-muted/70">
-            Application révisée le 21 août 2026
+            Application révisée le 1er septembre 2026
           </p>
         </div>
       </div>
