@@ -26,7 +26,7 @@ Construire une application web (dashboard) pour prédire les horaires d'ouvertur
   - Hauteurs d'eau corrigées
   - Plages d'ouverture de la porte (vert = ouvert, rouge = fermé)
   - Compteur temps restant avant fermeture
-  - Correction pression atmosphérique (input utilisateur)
+  - Correction automatique avec la pression prévue heure par heure sur les deux pages ; bouton activé par défaut sur « Aujourd'hui », simulation manuelle et retour au suivi automatique
   - Vue semaine
 - **Compétence**: `vibecoding-webapp-swarm`
 

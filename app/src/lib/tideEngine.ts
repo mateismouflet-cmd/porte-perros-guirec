@@ -54,6 +54,16 @@ export interface HourlyPressure {
   pressure: number;
 }
 
+export interface PressureForecast {
+  points: HourlyPressure[];
+  /** Date de récupération, pas l'heure de production du modèle météo. */
+  fetchedAt: Date | null;
+}
+
+/** auto = prévision horaire ; 0 = désactivée ; nombre non nul = simulation en mètres. */
+export type PressureMode = 'auto' | number;
+export type PressureStatus = 'applied' | 'partial' | 'unavailable' | 'disabled' | 'simulation' | 'included';
+
 export type TideSource = 'shom' | 'openmeteo' | 'mock';
 
 export interface TideData {
@@ -67,8 +77,10 @@ export interface TideData {
   nextEvent: { type: 'open' | 'close'; time: Date } | null;
   /** Prochaine plage complète à venir dans l'horizon de données chargé */
   nextWindow: TideWindow | null;
-  pressure: number;
+  pressure: number | null;
   pressureCorrection: number;
+  pressureStatus: PressureStatus;
+  pressureUpdatedAt: Date | null;
   /** Provenance réelle des données affichées */
   source: TideSource;
   /** Courbe de hauteur d'eau du jour (pas 5 min si SHOM) pour les graphiques */
@@ -459,40 +471,69 @@ function getMockRange(date: Date, futureDays = 1): { events: TideEvent[]; curve:
 // Pression atmosphérique (Open-Meteo Weather)
 // ============================================================
 
-export async function fetchPressure(date: Date): Promise<HourlyPressure[]> {
-  const dateKey = formatDateKey(date);
-  const cacheKey = `pressure-v2-${dateKey}`;
-
-  const cached = getCached<{ times: string[]; pressures: number[] }>(cacheKey, 30);
-  if (cached) {
-    return cached.times.map((t, i) => ({
-      time: new Date(t),
-      pressure: cached.pressures[i] ?? 1013.25,
-    }));
-  }
-
+export async function fetchPressureRange(start: Date, end: Date): Promise<PressureForecast> {
+  const startKey = formatDateKey(start);
+  const endKey = formatDateKey(end);
+  const cacheKey = `pressure-range-v3-${startKey}-${endKey}`;
+  type RawPressure = { times: number[]; pressures: (number | null)[]; fetchedAt: number };
+  let raw = getCached<RawPressure>(cacheKey, 30);
+  const fromCache = raw !== null;
   try {
-    const url =
-      `https://api.open-meteo.com/v1/forecast?latitude=48.8167&longitude=-3.45` +
-      `&hourly=surface_pressure&timezone=Europe%2FParis` +
-      `&start_date=${dateKey}&end_date=${dateKey}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('API météo indisponible');
-    const json = await response.json();
-    const times: string[] = json.hourly?.time ?? [];
-    const pressures: number[] = json.hourly?.surface_pressure ?? [];
-    if (times.length === 0 || pressures.length === 0) throw new Error('vide');
-    setCache(cacheKey, { times, pressures });
-    return times.map((t, i) => ({
-      time: new Date(t),
-      pressure: pressures[i] ?? 1013.25,
-    }));
+    if (!raw) {
+      const url =
+        `https://api.open-meteo.com/v1/forecast?latitude=48.8167&longitude=-3.45` +
+        `&hourly=pressure_msl&timezone=Europe%2FParis&timeformat=unixtime` +
+        `&start_date=${startKey}&end_date=${endKey}`;
+      const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      if (!response.ok) throw new Error('API météo indisponible');
+      const json = await response.json();
+      raw = { times: json.hourly?.time ?? [], pressures: json.hourly?.pressure_msl ?? [], fetchedAt: Date.now() };
+    }
+    const pressures = raw.pressures;
+    const points = raw.times.flatMap((t, i) => {
+      const p = pressures[i];
+      return Number.isFinite(t) && typeof p === 'number' && Number.isFinite(p) && p >= 850 && p <= 1100
+        ? [{ time: new Date(t * 1000), pressure: p }] : [];
+    }).sort((a, b) => a.time.getTime() - b.time.getTime());
+    if (!points.length) throw new Error('Prévision de pression vide');
+    // Ne pas renouveler artificiellement l'âge du cache lors d'une lecture.
+    if (!fromCache) setCache(cacheKey, raw);
+    return { points, fetchedAt: new Date(raw.fetchedAt) };
   } catch {
-    return generateMockDataForDate(date).map((d) => ({
-      time: d.time,
-      pressure: 1013.25,
-    }));
+    return { points: [], fetchedAt: null };
   }
+}
+
+/** Interpolation entre deux heures ; aucune extrapolation ni pression fictive. */
+export function getPressureAt(points: HourlyPressure[], time: Date): number | null {
+  const t = time.getTime();
+  let lo = 0;
+  let hi = points.length - 1;
+  if (hi < 0 || t < points[lo].time.getTime() || t > points[hi].time.getTime()) return null;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (points[mid].time.getTime() <= t) lo = mid;
+    else hi = mid;
+  }
+  const a = points[lo];
+  const b = points[hi];
+  if (t === a.time.getTime()) return a.pressure;
+  if (t === b.time.getTime()) return b.pressure;
+  const span = b.time.getTime() - a.time.getTime();
+  if (span <= 0 || span > 3600000) return null;
+  return a.pressure + (b.pressure - a.pressure) * (t - a.time.getTime()) / span;
+}
+
+/** Une météo trouée laisse le cycle entier non corrigé pour éviter un saut de hauteur. */
+function pressureCoverage(curve: HourlyTideData[], events: TideEvent[], forecast: PressureForecast) {
+  const bounds = [curve[0]?.time, ...events.filter(e => e.type === 'BM').map(e => e.time), curve.at(-1)?.time]
+    .filter((t): t is Date => !!t)
+    .map(t => t.getTime()).sort((a, b) => a - b);
+  const missing = [...curve, ...events].filter(p => getPressureAt(forecast.points, p.time) === null);
+  const unavailable = bounds.slice(1).flatMap((end, i) =>
+    missing.some(p => p.time.getTime() >= bounds[i] && p.time.getTime() <= end)
+      ? [{ start: bounds[i], end }] : []);
+  return (time: Date) => !unavailable.some(r => time.getTime() >= r.start && time.getTime() <= r.end);
 }
 
 // ============================================================
@@ -758,8 +799,9 @@ export function calculateWindows(events: TideEvent[]): TideWindow[] {
 
 export async function getTideDataForDate(
   date: Date,
-  pressureCorrection: number,
-  futureDays = 1
+  pressureMode: PressureMode = 'auto',
+  futureDays = 1,
+  sharedPressure?: PressureForecast
 ): Promise<TideData> {
   // 1. Source de données : SHOM → Open-Meteo calibré → mock
   let source: TideSource = 'shom';
@@ -773,10 +815,20 @@ export async function getTideDataForDate(
     range = getMockRange(date, futureDays);
   }
 
-  // 2. Correction barométrique : décalage uniforme des hauteurs
-  const correction = pressureCorrection || 0;
-  const events = range.events.map((e) => ({ ...e, height: e.height + correction }));
-  const curve = range.curve.map((p) => ({ ...p, height: p.height + correction }));
+  // 2. Pression horaire sur tout l'horizon, avec une journée supplémentaire
+  // pour interpoler la dernière heure et les fenêtres à cheval sur minuit.
+  const forecast = sharedPressure ?? await fetchPressureRange(addDays(date, -1), addDays(date, futureDays + 1));
+  const covered = pressureCoverage(range.curve, range.events, forecast);
+  const correctionAt = (time: Date): number => {
+    // Le modèle marin inclut déjà le baromètre inverse (documentation Open-Meteo).
+    // Le bouton et la simulation ne rajoutent rien à ces hauteurs de secours.
+    if (source !== 'shom') return 0;
+    if (typeof pressureMode === 'number') return Number.isFinite(pressureMode) ? pressureMode : 0;
+    const p = getPressureAt(forecast.points, time);
+    return p !== null && covered(time) ? getPressureCorrection(p) : 0;
+  };
+  const events = range.events.map((e) => ({ ...e, height: e.height + correctionAt(e.time) }));
+  const curve = range.curve.map((p) => ({ ...p, height: p.height + correctionAt(p.time) }));
 
   // 3. Fenêtres d'ouverture sur l'ensemble de l'intervalle chargé
   const allWindows = calculateWindowsFromCurve(curve, events);
@@ -784,7 +836,7 @@ export async function getTideDataForDate(
   // 4. Restriction au jour demandé (jour calendaire local)
   const dayStart = new Date(date);
   dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);
+  const dayEnd = addDays(dayStart, 1);
 
   const dayEvents = events.filter((e) => isSameLocalDay(e.time, date));
   const dayReversals = calculateTideReversals(events, date);
@@ -806,17 +858,22 @@ export async function getTideDataForDate(
         : COEF_THRESHOLD;
   }
 
-  // 6. Pression (météo réelle, indicative — la correction appliquée reste
-  // celle passée en paramètre, contrôlée par l'utilisateur)
-  const pressureData = await fetchPressure(date);
+  // 6. Pression prévue à l'instant affiché, provenance et couverture météo.
   const now = new Date();
-  const refTime = isSameLocalDay(now, date) ? now : new Date(dayStart.getTime() + 12 * 3600 * 1000);
-  const nearest = pressureData.reduce((best, p) =>
-    Math.abs(p.time.getTime() - refTime.getTime()) <
-    Math.abs(best.time.getTime() - refTime.getTime())
-      ? p
-      : best
-  );
+  const noon = new Date(dayStart);
+  noon.setHours(12);
+  const refTime = isSameLocalDay(now, date) ? now : noon;
+  const pressure = getPressureAt(forecast.points, refTime);
+  const correction = correctionAt(refTime);
+  // Inclut l'horizon de la prochaine ouverture, pas seulement aujourd'hui.
+  const relevantPoints = range.curve.filter(p => p.time >= dayStart);
+  const coveredCount = relevantPoints.filter(p => covered(p.time) && getPressureAt(forecast.points, p.time) !== null).length;
+  const pressureStatus: PressureStatus = source === 'openmeteo' ? 'included'
+    : source === 'mock' ? 'unavailable'
+    : pressureMode === 0 ? 'disabled'
+    : typeof pressureMode === 'number' ? 'simulation'
+    : coveredCount === 0 ? 'unavailable'
+    : coveredCount < relevantPoints.length ? 'partial' : 'applied';
 
   // 7. État courant
   const currentHeight =
@@ -851,8 +908,10 @@ export async function getTideDataForDate(
     isOpen,
     nextEvent,
     nextWindow,
-    pressure: Math.round(nearest.pressure),
+    pressure: pressure === null ? null : Math.round(pressure * 10) / 10,
     pressureCorrection: correction,
+    pressureStatus,
+    pressureUpdatedAt: forecast.fetchedAt,
     source,
     curve: dayCurve,
   };
@@ -865,14 +924,15 @@ export async function getTideDataForDate(
 export async function getTideDataForDates(
   start: Date,
   count: number,
-  pressureCorrection: number
+  pressureMode: PressureMode = 'auto'
 ): Promise<TideData[]> {
   // Pré-remplissage du cache : [start - 1, start + count] en un seul appel
   await ensureShomDays(addDays(start, -1), count + 2);
+  const forecast = await fetchPressureRange(addDays(start, -1), addDays(start, count + 1));
 
   const results: TideData[] = [];
   for (let i = 0; i < count; i++) {
-    results.push(await getTideDataForDate(addDays(start, i), pressureCorrection));
+    results.push(await getTideDataForDate(addDays(start, i), pressureMode, 1, forecast));
   }
   return results;
 }

@@ -40,8 +40,18 @@
 
 ### API météo (pression) : Open-Meteo Weather
 - URL: `https://api.open-meteo.com/v1/forecast`
-- Paramètre : `hourly=surface_pressure`
+- Paramètres : `hourly=pressure_msl`, `timeformat=unixtime`, `timezone=Europe/Paris`
 - Gratuite, pas de clé API
+
+### Correction horaire (5 septembre 2026)
+- Activée par défaut dans « Aujourd'hui », avec interrupteur conservé. « Prévisions » utilise toujours le mode automatique.
+- Sur SHOM, chaque point de courbe et chaque hauteur PM/BM reçoit la correction correspondant à son instant (interpolation de la pression entre deux heures). Les heures PM/BM restent les références astronomiques SHOM ; les fenêtres sont recalculées sur la courbe corrigée.
+- Requête météo couvrant tout l'horizon, avec jours adjacents pour minuit ; une requête partagée pour la semaine. Cache 30 minutes ; les deux pages relancent les calculs toutes les 5 minutes et au retour sur l'onglet. La date affichée est celle de récupération, pas celle de production du modèle.
+- Une valeur météo absente, invalide ou expirée n'est jamais remplacée par 1013,25 hPa. Si un cycle entre deux BM contient un trou météo, ce cycle reste non corrigé et une alerte signale la couverture manquante. Pas d'extrapolation au-delà des données disponibles.
+- Le curseur active une simulation à pression constante ; « Revenir au suivi automatique » retrouve la prévision horaire. Désactiver l'interrupteur supprime la correction SHOM.
+- **Open-Meteo Marine inclut déjà le baromètre inverse** dans `sea_level_height_msl` : aucune correction supplémentaire automatique ou manuelle sur ce repli. L'interface l'indique. Source vérifiée : https://open-meteo.com/en/docs/marine-weather-api .
+- Source météo : https://open-meteo.com/en/docs . La pression utilisée est ramenée au niveau de la mer (`pressure_msl`).
+- Test de régression : données SHOM du 4 au 6 septembre 2026 dans `app/tests/fixtures/`. Le 5 à 12:46, PM 7,42 m ; à 1026,7 hPa, hauteur corrigée 7,2855 m et disparition du créneau de midi de 46 minutes.
 
 ## Formules de calcul validées
 

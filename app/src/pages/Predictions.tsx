@@ -31,6 +31,7 @@ import {
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import Layout from '@/components/Layout';
+import PressureNotice from '@/components/PressureNotice';
 import {
   getTideDataForDates,
   formatDuration,
@@ -206,14 +207,18 @@ function toDayPrediction(td: TideData, date: Date): DayPrediction {
   };
 }
 
-async function load7DaysData(): Promise<{ days: DayPrediction[]; source: TideSource }> {
+async function load7DaysData(): Promise<{ days: DayPrediction[]; source: TideSource; pressure: Pick<TideData, 'pressureStatus' | 'pressureUpdatedAt'> }> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const tideData = await getTideDataForDates(today, 7, 0);
+  const tideData = await getTideDataForDates(today, 7, 'auto');
+  const statuses = tideData.map(td => td.pressureStatus);
+  const pressureStatus = statuses.every(s => s === statuses[0]) ? statuses[0]
+    : statuses.some(s => s === 'partial' || s === 'unavailable') ? 'partial' : 'included';
   return {
     days: tideData.map((td, i) => toDayPrediction(td, addDays(today, i))),
     source: tideData[0]?.source ?? 'mock',
+    pressure: { pressureStatus, pressureUpdatedAt: tideData[0]?.pressureUpdatedAt ?? null },
   };
 }
 
@@ -1095,6 +1100,7 @@ export default function Predictions() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [days, setDays] = useState<DayPrediction[] | null>(null);
   const [source, setSource] = useState<TideSource>('shom');
+  const [pressure, setPressure] = useState<Pick<TideData, 'pressureStatus' | 'pressureUpdatedAt'> | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [now, setNow] = useState(() => new Date());
 
@@ -1105,18 +1111,30 @@ export default function Predictions() {
 
   useEffect(() => {
     let cancelled = false;
-    load7DaysData()
+    let pending = false;
+    const refresh = () => {
+      if (pending) return;
+      pending = true;
+      load7DaysData()
       .then((result) => {
         if (cancelled) return;
         setDays(result.days);
         setSource(result.source);
+        setPressure(result.pressure);
         setLastUpdated(new Date());
       })
       .catch(() => {
-        if (!cancelled) setDays([]);
-      });
+        if (!cancelled) setDays(previous => previous ?? []);
+      }).finally(() => { pending = false; });
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    refresh();
+    const interval = setInterval(refresh, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
 
@@ -1149,6 +1167,7 @@ export default function Predictions() {
   return (
     <Layout lastUpdated={lastUpdated}>
       <div className="space-y-8">
+        {pressure && <PressureNotice data={pressure} />}
         {/* Avertissement si les données SHOM ne sont pas disponibles */}
         {source !== 'shom' && (
           <div className="flex items-start gap-2.5 bg-status-warning/10 border border-status-warning/25 rounded-xl px-4 py-3">

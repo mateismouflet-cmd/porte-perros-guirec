@@ -21,7 +21,7 @@ npm run preview      # serve the production build (port 4173, includes the SHOM 
 ```
 
 Vite 7 requires Node ≥ 20.19 for `npm run dev` (`crypto.hash`); `npm run build` works on older Node.
-There is no test runner configured.
+Run `npm.cmd test` for the Node test suite (SHOM cache and hourly pressure regressions).
 
 ## Architecture
 
@@ -39,7 +39,7 @@ app/src/
 └── hooks/use-mobile.ts
 ```
 
-The two pages are intentionally monolithic and own their own sub-sections inline. Home fetches via `getTideDataForDate(date, pressureCorrection)`; Predictions via `getTideDataForDates(start, 7, 0)` (one batched SHOM request for the whole range).
+The two pages own most sub-sections inline; `PressureNotice` shares the weather status. Home fetches via `getTideDataForDate(date, pressureMode, 10)`; Predictions via `getTideDataForDates(start, 7, 'auto')`. Pressure mode defaults to `'auto'`; numeric zero disables the SHOM correction and a nonzero numeric value simulates a constant offset in metres. Keep the Home switch enabled by default. Both pages refresh every five minutes and on tab visibility restoration.
 
 ### Tide engine (`src/lib/tideEngine.ts`)
 
@@ -51,7 +51,7 @@ Three data sources, tried in order; `TideData.source` ('shom' | 'openmeteo' | 'm
 2. **Open-Meteo Marine (fallback)** — `hourly=sea_level_height_msl` (the old `sea_surface_height` variable no longer exists). Heights are MSL-referenced and the model's phase is early at Perros, so a calibration measured against SHOM (June 2026, stable across coef 49→93) is applied: **+38 min on times, +5.9 m on heights**. PM/BM from parabolic refinement of hourly extrema; ±5 min / ±15 cm accuracy.
 3. **Mock (last resort)** — one realistic hardcoded day, time-shifted.
 
-Gate windows are computed by `calculateWindowsFromCurve()`: linear interpolation on the 5-min curve for the rising 7.33 m crossing and the rule-dependent closing. Pressure correction is a flat offset applied to events + curve before window computation. Atmospheric pressure comes from Open-Meteo Weather (`hourly=surface_pressure`, `timezone=Europe/Paris`).
+Gate windows are computed by `calculateWindowsFromCurve()`: linear interpolation on the 5-min curve for the rising 7.30 m crossing and the rule-dependent closing. SHOM event heights and curve points receive the pressure correction for their own timestamp, interpolated from Open-Meteo Weather (`hourly=pressure_msl`, `timeformat=unixtime`, `timezone=Europe/Paris`). Fetch the entire horizon plus adjacent days; share one weather request across the weekly calculations. Cache weather for 30 minutes and expose its retrieval timestamp and missing coverage. Never silently replace missing pressure with 1013.25 hPa; leave affected BM-to-BM cycles uncorrected and warn. The Marine fallback already includes the inverse barometer effect: do not apply it twice. See `info.md` for sources and regression evidence.
 
 Each `getTideDataForDate(date, …)` computes over [date−1, date+1] so windows spanning midnight and the UTC+1→local conversion are handled, then filters events/windows/curve to the local calendar day.
 
@@ -59,7 +59,7 @@ Each `getTideDataForDate(date, …)` computes over [date−1, date+1] so windows
 
 These are domain rules baked into `calculateWindowsFromCurve()`. Don't change them without checking `info.md`:
 
-- **Open** when rising tide crosses **7.33 m**.
+- **Open** when rising tide crosses **7.30 m**.
 - **Close** depends on the high-water height (PM) and the tidal coefficient:
   - `PM > 7.6 m` and `coef < 70` → close at **7.60 m** on the descent.
   - `PM > 7.6 m` and `coef ≥ 70` → close at **8.00 m** on the descent (or at PM if PM < 8.0 m).

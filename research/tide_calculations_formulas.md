@@ -340,6 +340,17 @@ Le seuil d'ouverture de 7,30 m correspond approximativement à :
 
 ## 7. Impact de la pression atmosphérique sur le niveau de la mer
 
+Implémentation révisée le 5 septembre 2026 : `Δh(t) = -(P_msl(t) - 1013.25) × 0.01` m,
+avec interpolation des prévisions horaires Open-Meteo entre deux heures. Chaque hauteur
+SHOM reçoit la correction de son instant ; les heures PM/BM astronomiques sont conservées.
+Le suivi est automatique par défaut, avec interrupteur et simulation manuelle sur « Aujourd'hui ».
+La page « Prévisions » utilise les pressions de chaque journée. Le cache météo expire après
+30 minutes ; les pages vérifient les données toutes les 5 minutes et au retour sur l'onglet.
+Un cycle dont la météo est incomplète reste non corrigé, avec avertissement explicite.
+Le repli `sea_level_height_msl` inclut déjà le baromètre inverse et ne reçoit aucune correction
+supplémentaire. Sources : https://open-meteo.com/en/docs et
+https://open-meteo.com/en/docs/marine-weather-api . Détails et cas du 5 septembre dans `info.md`.
+
 ### 7.1 Règle du baromètre inversé
 
 ```

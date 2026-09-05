@@ -28,6 +28,7 @@ import {
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import Layout from '@/components/Layout';
+import PressureNotice from '@/components/PressureNotice';
 import {
   getTideDataForDate,
   getPressureCorrection,
@@ -669,10 +670,11 @@ function MetricsRow({
     },
     {
       label: 'PRESSION',
-      value: `${pressure} hPa`,
+      value: pressure === null ? 'Indisponible' : `${pressure} hPa`,
       sub:
-        pressureCorrection !== 0
-          ? `${pressureCorrection > 0 ? '+' : ''}${(pressureCorrection * 100).toFixed(0)} cm`
+        tideData.pressureStatus === 'included' ? 'Effet déjà inclus au modèle'
+        : pressureCorrection !== 0
+          ? `${tideData.pressureStatus === 'simulation' ? 'Simulation : ' : ''}${pressureCorrection > 0 ? '+' : ''}${(pressureCorrection * 100).toFixed(0)} cm`
           : 'Pas de correction',
       color: 'text-accent-teal',
       icon: <Gauge className="w-5 h-5 text-text-muted" />,
@@ -715,6 +717,9 @@ function MetricsRow({
               {'hasToggle' in m && m.hasToggle && (
                 <button
                   onClick={onTogglePressure}
+                  role="switch"
+                  aria-checked={pressureEnabled}
+                  aria-label="Correction barométrique (indicateur)"
                   className={`ml-auto relative w-8 h-4 rounded-full transition-colors duration-200 ${
                     pressureEnabled ? 'bg-accent-teal' : 'bg-bg-surface'
                   }`}
@@ -1096,26 +1101,27 @@ function Timeline({ events, reversals, windows }: TimelineProps) {
 
 interface PressureSectionProps {
   pressure: number;
-  measuredPressure: number;
+  predictedPressure: number | null;
+  isSimulation: boolean;
+  canSimulate: boolean;
   enabled: boolean;
   onToggle: () => void;
   onPressureChange: (p: number) => void;
-  onResetToMeasured: () => void;
+  onResetToAuto: () => void;
   correction: number;
 }
 
 function PressureSection({
   pressure,
-  measuredPressure,
+  predictedPressure,
+  isSimulation,
+  canSimulate,
   enabled,
   onToggle,
   onPressureChange,
-  onResetToMeasured,
+  onResetToAuto,
   correction,
 }: PressureSectionProps) {
-  // Le curseur est-il calé sur la pression réelle mesurée du jour ?
-  const isOnMeasured = pressure === measuredPressure;
-
   return (
     <motion.div
       custom={5}
@@ -1133,6 +1139,9 @@ function PressureSection({
         </div>
         <button
           onClick={onToggle}
+          role="switch"
+          aria-checked={enabled}
+          aria-label="Correction barométrique"
           className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${
             enabled ? 'bg-accent-teal' : 'bg-bg-surface'
           }`}
@@ -1145,19 +1154,19 @@ function PressureSection({
         </button>
       </div>
 
-      {/* Pression réelle mesurée (donnée auto), toujours visible */}
+      {/* Prévision météo, distincte de la simulation manuelle. */}
       <div className="flex items-center justify-between mb-3 text-[0.8125rem]">
         <span className="text-text-secondary">
-          Pression mesurée à Perros actuellement
+          Pression prévue à Perros actuellement
         </span>
-        <span className="font-mono text-text-accent">{measuredPressure} hPa</span>
+        <span className="font-mono text-text-accent">{predictedPressure === null ? 'Indisponible' : `${predictedPressure} hPa`}</span>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
         <div className="flex-1 w-full">
           <div className="flex items-center justify-between mb-2">
             <span className="font-mono-label text-text-muted">
-              Pression utilisée pour le calcul
+              {isSimulation ? 'Simulation à pression constante' : 'Simulation manuelle (curseur)'}
             </span>
             <span className="font-mono text-sm text-text-accent">
               {pressure} hPa
@@ -1167,20 +1176,22 @@ function PressureSection({
             type="range"
             min={970}
             max={1040}
+            step={0.1}
             value={pressure}
             onChange={(e) => onPressureChange(Number(e.target.value))}
-            disabled={!enabled}
+            disabled={!enabled || !canSimulate}
+            aria-label="Pression de simulation"
             className="w-full h-1.5 bg-bg-surface rounded-full appearance-none cursor-pointer accent-accent-teal disabled:opacity-50"
           />
           <div className="flex justify-between mt-1">
             <span className="font-mono text-[10px] text-text-muted">970</span>
-            {enabled && !isOnMeasured && (
+            {enabled && isSimulation && (
               <button
-                onClick={onResetToMeasured}
+                onClick={onResetToAuto}
                 className="flex items-center gap-1 text-[10px] text-accent-teal hover:brightness-110 transition-all"
               >
                 <RotateCcw className="w-2.5 h-2.5" />
-                Revenir à la pression réelle
+                Revenir au suivi automatique
               </button>
             )}
             <span className="font-mono text-[10px] text-text-muted">1040</span>
@@ -1188,7 +1199,7 @@ function PressureSection({
         </div>
 
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-bg-primary/50">
-          <span className="font-mono-label text-text-muted">Impact</span>
+          <span className="font-mono-label text-text-muted">Correction actuelle</span>
           <span
             className={`font-mono text-sm font-medium ${
               correction <= 0 ? 'text-status-open' : 'text-status-warning'
@@ -1205,9 +1216,10 @@ function PressureSection({
 
       <p className="mt-3 text-[0.8125rem] text-text-muted flex items-start gap-1.5">
         <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-        {enabled
-          ? 'Activée : les hauteurs et horaires de porte sont corrigés avec la pression ci-dessus (par défaut, la pression réelle du jour). Une pression élevée abaisse le niveau de la mer, une dépression l’élève.'
-          : 'Désactivée : aucune correction n’est appliquée. Activer pour corriger les horaires avec la pression réelle du jour (ajustable). Δh = -(P - 1013.25) × 0.01'}
+        {!canSimulate ? 'Les réglages de correction et de simulation s’appliquent aux prédictions SHOM. Voir la provenance des données ci-dessus.'
+          : !enabled ? 'Désactivée : aucune correction n’est appliquée aux prédictions SHOM.'
+          : isSimulation ? 'Simulation : la pression choisie est appliquée à toutes les heures. Revenir au suivi automatique pour retrouver la météo prévue.'
+          : 'Suivi automatique : chaque hauteur est corrigée avec la pression prévue à son horaire, y compris les prochains jours. Déplacer le curseur active une simulation à pression constante.'}
       </p>
     </motion.div>
   );
@@ -1221,50 +1233,48 @@ export default function Home() {
   const [tideData, setTideData] = useState<TideData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pressureEnabled, setPressureEnabled] = useState(false);
-  const [manualPressure, setManualPressure] = useState(1013);
+  const [pressureEnabled, setPressureEnabled] = useState(true);
+  const [manualPressure, setManualPressure] = useState<number | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  // Au premier chargement, on cale le curseur sur la pression réelle mesurée
-  // (donnée auto de la météo) ; ensuite l'utilisateur peut l'ajuster librement.
-  const pressureInitialized = useRef(false);
+  // Ignore les réponses d'un ancien réglage lorsque l'utilisateur bascule vite.
+  const requestId = useRef({ id: 0 });
 
   const loadData = useCallback(async () => {
+    const id = ++requestId.current.id;
     setIsLoading(true);
     setError(null);
     try {
-      const correction = pressureEnabled
-        ? getPressureCorrection(manualPressure)
-        : 0;
+      const correction = !pressureEnabled ? 0
+        : manualPressure === null ? 'auto' : getPressureCorrection(manualPressure);
       // La carte principale doit connaître la prochaine ouverture même pendant
       // plusieurs jours de morte-eau. SHOM publie actuellement jusqu'à J+10 ;
       // les prévisions détaillées restent volontairement à 7 jours.
       const data = await getTideDataForDate(new Date(), correction, 10);
+      if (id !== requestId.current.id) return;
       setTideData(data);
       setLastUpdated(new Date());
     } catch {
-      setError('Impossible de récupérer les données marégraphiques.');
+      if (id === requestId.current.id) setError('Impossible de récupérer les données marégraphiques.');
     } finally {
-      setIsLoading(false);
+      if (id === requestId.current.id) setIsLoading(false);
     }
   }, [pressureEnabled, manualPressure]);
 
   useEffect(() => {
+    const request = requestId.current;
     loadData();
+    return () => { request.id++; };
   }, [loadData]);
-
-  // Caler le curseur sur la pression réelle mesurée, une seule fois,
-  // dès que les premières données arrivent.
-  useEffect(() => {
-    if (tideData && !pressureInitialized.current) {
-      pressureInitialized.current = true;
-      setManualPressure(tideData.pressure);
-    }
-  }, [tideData]);
 
   // Auto-refresh toutes les 5 minutes
   useEffect(() => {
     const iv = setInterval(loadData, 5 * 60 * 1000);
-    return () => clearInterval(iv);
+    const onVisible = () => { if (document.visibilityState === 'visible') loadData(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(iv);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [loadData]);
 
   if (isLoading && !tideData) {
@@ -1332,6 +1342,8 @@ export default function Home() {
         </div>
       )}
 
+      <div className="mb-6"><PressureNotice data={tideData} /></div>
+
       {/* Layout grille */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Colonne gauche */}
@@ -1347,13 +1359,15 @@ export default function Home() {
             onTogglePressure={() => setPressureEnabled((v) => !v)}
           />
           <PressureSection
-            pressure={manualPressure}
-            measuredPressure={tideData.pressure}
+            pressure={manualPressure ?? tideData.pressure ?? 1013.25}
+            predictedPressure={tideData.pressure}
+            isSimulation={manualPressure !== null}
+            canSimulate={tideData.source === 'shom'}
             enabled={pressureEnabled}
             onToggle={() => setPressureEnabled((v) => !v)}
             onPressureChange={setManualPressure}
-            onResetToMeasured={() => setManualPressure(tideData.pressure)}
-            correction={getPressureCorrection(manualPressure)}
+            onResetToAuto={() => setManualPressure(null)}
+            correction={tideData.pressureCorrection}
           />
         </div>
 
